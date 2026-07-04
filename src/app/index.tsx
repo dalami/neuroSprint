@@ -1,15 +1,34 @@
-import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../features/auth/AuthContext';
+import { useProfile } from '../features/profile/useProfile';
+import { supabase } from '../lib/supabase';
 import { colors, radius, spacing } from '../theme';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { session, loading } = useAuth();
+  const profile = useProfile();
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/login" />;
+  }
+
+  const name =
+    profile.data?.display_name ?? session.user.email?.split('@')[0] ?? '';
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* TODO: nombre real del usuario cuando exista auth */}
-      <Text style={styles.greeting}>Hola</Text>
+      <Text style={styles.greeting}>Hola {name}</Text>
       <Text style={styles.title}>Hoy toca entrenar</Text>
       <Text style={styles.subtitle}>Duración estimada: 7 minutos</Text>
 
@@ -20,15 +39,18 @@ export default function HomeScreen() {
         <Text style={styles.buttonText}>ENTRENAR</Text>
       </Pressable>
 
-      {/* TODO: racha 🔥, nivel mental 🧠 y evolución 📈 cuando exista la DB */}
       <View style={styles.statsRow}>
-        <Text style={styles.statMock}>🔥 —</Text>
-        <Text style={styles.statMock}>🧠 —</Text>
-        <Text style={styles.statMock}>📈 —</Text>
+        <Text style={styles.statMock}>🔥 {profile.data?.streak_days ?? '—'}</Text>
+        <Text style={styles.statMock}>🧠 Nivel {profile.data?.level ?? '—'}</Text>
+        <Text style={styles.statMock}>📈 {profile.data?.xp ?? '—'} XP</Text>
       </View>
 
       <Pressable onPress={() => router.push('/infinite')}>
-        <Text style={styles.infiniteLink}>Modo infinito →</Text>
+        <Text style={styles.link}>Modo infinito →</Text>
+      </Pressable>
+
+      <Pressable onPress={() => supabase.auth.signOut()}>
+        <Text style={styles.linkSmall}>Cerrar sesión</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -82,10 +104,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 16,
   },
-  infiniteLink: {
+  link: {
     color: colors.textMuted,
     fontSize: 15,
     marginTop: spacing.lg,
     textDecorationLine: 'underline',
+  },
+  linkSmall: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: spacing.md,
   },
 });

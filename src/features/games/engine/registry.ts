@@ -1,8 +1,15 @@
+import { LogicSeriesGame } from '../logic-series/LogicSeriesGame';
 import { MentalMathGame } from '../mental-math/MentalMathGame';
+import { NBackGame } from '../n-back/NBackGame';
+import { ParityGame } from '../parity/ParityGame';
 import { NumberMemoryGame } from '../number-memory/NumberMemoryGame';
 import { ReflexesGame } from '../reflexes/ReflexesGame';
 import { SelectiveAttentionGame } from '../selective-attention/SelectiveAttentionGame';
+import { SpatialRotationGame } from '../spatial-rotation/SpatialRotationGame';
+import { StroopGame } from '../stroop/StroopGame';
+import { TargetSumGame } from '../target-sum/TargetSumGame';
 import { VisualMemoryGame } from '../visual-memory/VisualMemoryGame';
+import { VisualSpeedGame } from '../visual-speed/VisualSpeedGame';
 import type { GameComponent, GameId, SkillId } from './types';
 
 interface GameDefinition {
@@ -21,7 +28,8 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
   visual_memory: {
     name: 'Memoria visual',
     skill: 'memoria',
-    instructions: 'Memorizá las celdas iluminadas y volvé a marcarlas cuando se apaguen.',
+    instructions:
+      'Memorizá las celdas iluminadas y marcalas. En niveles altos se iluminan en secuencia: repetí el orden exacto.',
     component: VisualMemoryGame,
   },
   reflexes: {
@@ -41,7 +49,7 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
     name: 'Atención selectiva',
     skill: 'atencion',
     instructions:
-      'Van a aparecer figuras de distintos colores. Tocá la pantalla SOLO cuando veas un círculo verde.',
+      'Tocá TODAS las figuras que cumplan la regla antes de que se acabe el tiempo. Los distractores penalizan, y en niveles altos la regla cambia a mitad de partida.',
     component: SelectiveAttentionGame,
   },
   number_memory: {
@@ -49,6 +57,48 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
     skill: 'memoria',
     instructions: 'Memorizá el número que aparece y escribilo de memoria con el teclado.',
     component: NumberMemoryGame,
+  },
+  logic_series: {
+    name: 'Series lógicas',
+    skill: 'logica',
+    instructions: 'Descubrí el patrón de la serie y elegí el número que sigue.',
+    component: LogicSeriesGame,
+  },
+  visual_speed: {
+    name: 'Velocidad visual',
+    skill: 'visual',
+    instructions: 'Uno de los círculos tiene un color distinto. Encontralo y tocalo lo más rápido posible.',
+    component: VisualSpeedGame,
+  },
+  spatial_rotation: {
+    name: 'Rotación espacial',
+    skill: 'visual',
+    instructions: 'Mirá la figura de arriba y elegí cuál de las opciones es la misma figura rotada (las espejadas no valen).',
+    component: SpatialRotationGame,
+  },
+  stroop: {
+    name: 'Stroop de colores',
+    skill: 'atencion',
+    instructions: 'Tocá el color de la TINTA de la palabra, ignorando lo que la palabra dice. Contra reloj.',
+    component: StroopGame,
+  },
+  parity: {
+    name: 'Par o impar',
+    skill: 'velocidad',
+    instructions: 'Decidí si cada número es par o impar antes de que se acabe la barra de tiempo.',
+    component: ParityGame,
+  },
+  n_back: {
+    name: 'Igual al anterior',
+    skill: 'memoria',
+    instructions: 'Mirá la secuencia de figuras y decidí si cada una es igual a la que apareció antes. En niveles altos, comparás con 2 o 3 posiciones atrás.',
+    component: NBackGame,
+  },
+  target_sum: {
+    name: 'Suma objetivo',
+    skill: 'calculo',
+    instructions: 'Tocá los números que sumados dan exactamente el objetivo, antes de que se acabe el tiempo.',
+    component: TargetSumGame,
   },
 };
 
@@ -59,4 +109,7 @@ export const TEST_SEQUENCE: GameId[] = [
   'mental_math',
   'selective_attention',
   'number_memory',
+  'logic_series',
+  'visual_speed',
+  'spatial_rotation',
 ];

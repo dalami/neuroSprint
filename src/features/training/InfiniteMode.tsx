@@ -3,7 +3,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GAME_REGISTRY } from '../games/engine/registry';
 import type { GameId, GameResult } from '../games/engine/types';
-import { applyLadder, useGameLevels, type GameLevels } from '../games/engine/useGameLevels';
+import { applyLadder } from '../games/engine/ladder';
+import { ALL_GAME_IDS } from '../games/engine/types';
+import { useGameProgress, type GameLevels } from '../profile/useProfile';
 import { colors, radius, spacing } from '../../theme';
 
 const ALL_GAMES = Object.keys(GAME_REGISTRY) as GameId[];
@@ -30,7 +32,8 @@ interface Props {
  * pertenece al entrenamiento diario).
  */
 export function InfiniteMode({ onExit }: Props) {
-  const { levels, loaded } = useGameLevels(); // solo lectura: updateLevel NO se usa acá
+  // Punto de partida: niveles oficiales del servidor (solo lectura)
+  const progress = useGameProgress();
   const [runLevels, setRunLevels] = useState<GameLevels | null>(null);
   const [phase, setPhase] = useState<Phase>(() => ({
     kind: 'intro',
@@ -40,14 +43,21 @@ export function InfiniteMode({ onExit }: Props) {
   const [gamesPlayed, setGamesPlayed] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
 
-  // Copia de los niveles oficiales como punto de partida de la corrida
+  // Copia de los niveles oficiales como punto de partida de la corrida.
+  // Si falla la lectura (sin conexión), el modo infinito arranca en nivel 1:
+  // es juego libre, no bloquea.
   useEffect(() => {
-    if (loaded) {
-      setRunLevels((prev) => prev ?? { ...levels });
+    if (runLevels !== null) return;
+    if (progress.data) {
+      setRunLevels({ ...progress.data });
+    } else if (progress.isError) {
+      setRunLevels(
+        Object.fromEntries(ALL_GAME_IDS.map((g) => [g, 1])) as GameLevels
+      );
     }
-  }, [loaded, levels]);
+  }, [progress.data, progress.isError, runLevels]);
 
-  if (!loaded || runLevels === null) {
+  if (runLevels === null) {
     return (
       <SafeAreaView style={styles.container}>
         <ActivityIndicator color={colors.primary} />

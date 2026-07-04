@@ -11,11 +11,24 @@ export const ALL_GAME_IDS = [
   'mental_math',
   'selective_attention',
   'number_memory',
+  'logic_series',
+  'visual_speed',
+  'spatial_rotation',
+  'stroop',
+  'parity',
+  'n_back',
+  'target_sum',
 ] as const;
 
 export type GameId = (typeof ALL_GAME_IDS)[number];
 
-export type SkillId = 'memoria' | 'velocidad' | 'calculo' | 'atencion';
+export type SkillId =
+  | 'memoria'
+  | 'velocidad'
+  | 'calculo'
+  | 'atencion'
+  | 'logica'
+  | 'visual';
 
 /**
  * Resultado que TODO minijuego debe producir al terminar.

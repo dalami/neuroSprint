@@ -3,11 +3,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
 
-const STIMULI = 18;
-const GAP_MS = 300;
+const ROUNDS = 5;
+const RULE_CHANGE_ROUND = 3; // desde nivel 40, la regla cambia en la ronda 4
+const RULE_MS = 1700;
+const ROUND_END_MS = 850;
+const TICK_MS = 100;
 
-type Shape = 'circle' | 'square';
+type Shape = 'circle' | 'square' | 'diamond';
 type StimColor = 'green' | 'red' | 'blue' | 'yellow';
+
+const SHAPES: Shape[] = ['circle', 'square', 'diamond'];
+const COLORS: StimColor[] = ['green', 'red', 'blue', 'yellow'];
 
 const COLOR_HEX: Record<StimColor, string> = {
   green: '#2EA043',
@@ -16,103 +22,209 @@ const COLOR_HEX: Record<StimColor, string> = {
   yellow: '#D29922',
 };
 
-interface Stimulus {
+const SHAPE_LABEL: Record<Shape, string> = {
+  circle: 'círculos',
+  square: 'cuadrados',
+  diamond: 'rombos',
+};
+
+const COLOR_LABEL: Record<StimColor, string> = {
+  green: 'verdes',
+  red: 'rojos',
+  blue: 'azules',
+  yellow: 'amarillos',
+};
+
+interface Rule {
   shape: Shape;
   color: StimColor;
-  isTarget: boolean; // objetivo = círculo verde
-  topPct: number;    // posición aleatoria dentro del área de juego
+}
+
+function ruleText(r: Rule): string {
+  return `Tocá los ${SHAPE_LABEL[r.shape]} ${COLOR_LABEL[r.color]}`;
+}
+
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomRule(exclude?: Rule): Rule {
+  for (;;) {
+    const r: Rule = {
+      shape: SHAPES[randInt(0, SHAPES.length - 1)],
+      color: COLORS[randInt(0, COLORS.length - 1)],
+    };
+    if (!exclude || r.shape !== exclude.shape || r.color !== exclude.color) {
+      return r;
+    }
+  }
+}
+
+/** Curvas de dificultad: más figuras, más chicas y menos tiempo */
+function config(level: number) {
+  const figures = Math.min(14, 6 + Math.floor(level / 8));
+  const targets = Math.min(figures - 2, Math.max(2, Math.round(figures * 0.4)));
+  const size = Math.max(44, 78 - Math.floor(level * 0.5));
+  const roundMs = Math.max(2500, 6500 - level * 45);
+  return { figures, targets, size, roundMs };
+}
+
+interface Figure {
+  id: number;
+  shape: Shape;
+  color: StimColor;
+  isTarget: boolean;
+  topPct: number;
   leftPct: number;
 }
 
-const DISTRACTORS: Array<[Shape, StimColor]> = [
-  ['square', 'green'], // el distractor más tramposo
-  ['circle', 'red'],
-  ['circle', 'blue'],
-  ['circle', 'yellow'],
-  ['square', 'red'],
-  ['square', 'blue'],
-];
-
-/**
- * A mayor nivel: menos tiempo en pantalla, figuras más chicas y
- * posiciones más dispersas (hay que buscarlas, no solo reconocerlas).
- */
-function showDuration(level: number): number {
-  return Math.max(550, 1300 - (level - 1) * 8);
-}
-
-function stimulusSize(level: number): number {
-  return Math.max(60, 140 - (level - 1) * 1.5);
-}
-
-function makeSequence(level: number): Stimulus[] {
-  // Amplitud de dispersión: nivel 1 = centrado, crece hasta ocupar el área
-  const jitter = Math.min(70, (level - 1) * 3);
-  const base = (70 - jitter) / 2; // centra el rango disponible
-
-  return Array.from({ length: STIMULI }, () => {
-    const topPct = base + Math.random() * jitter;
-    const leftPct = base + Math.random() * jitter;
-    if (Math.random() < 0.4) {
-      return { shape: 'circle' as const, color: 'green' as const, isTarget: true, topPct, leftPct };
+/** Distractor con sesgo hacia los "tramposos" (comparten forma o color) */
+function distractorFor(rule: Rule): { shape: Shape; color: StimColor } {
+  if (Math.random() < 0.55) {
+    if (Math.random() < 0.5) {
+      const others = COLORS.filter((c) => c !== rule.color);
+      return { shape: rule.shape, color: others[randInt(0, others.length - 1)] };
     }
-    const [shape, color] = DISTRACTORS[Math.floor(Math.random() * DISTRACTORS.length)];
-    return { shape, color, isTarget: false, topPct, leftPct };
+    const others = SHAPES.filter((s) => s !== rule.shape);
+    return { shape: others[randInt(0, others.length - 1)], color: rule.color };
+  }
+  for (;;) {
+    const shape = SHAPES[randInt(0, SHAPES.length - 1)];
+    const color = COLORS[randInt(0, COLORS.length - 1)];
+    if (shape !== rule.shape || color !== rule.color) return { shape, color };
+  }
+}
+
+/** Figuras en slots de una grilla 4×5 con jitter: nunca se superponen */
+function makeRoundFigures(rule: Rule, figureCount: number, targetCount: number): Figure[] {
+  const slots = Array.from({ length: 20 }, (_, i) => i);
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]];
+  }
+
+  return Array.from({ length: figureCount }, (_, i) => {
+    const slot = slots[i];
+    const col = slot % 4;
+    const row = Math.floor(slot / 4);
+    const isTarget = i < targetCount;
+    const kind = isTarget ? rule : distractorFor(rule);
+    return {
+      id: i,
+      shape: kind.shape,
+      color: kind.color,
+      isTarget,
+      leftPct: 2 + col * 24 + Math.random() * 4,
+      topPct: 2 + row * 19 + Math.random() * 3,
+    };
   });
 }
 
 type Phase =
-  | { kind: 'show'; index: number }
-  | { kind: 'gap'; index: number }
+  | { kind: 'rule'; round: number }
+  | { kind: 'play'; round: number }
+  | { kind: 'roundEnd'; round: number; completed: boolean }
   | { kind: 'done' };
 
 export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
-  const [sequence] = useState<Stimulus[]>(() => makeSequence(level));
-  const [phase, setPhase] = useState<Phase>({ kind: 'show', index: 0 });
+  const { figures: figureCount, targets: targetCount, size, roundMs } = config(level);
 
-  const respondedRef = useRef(false);
+  // Reglas y figuras de las 5 rondas, pregeneradas
+  const [setup] = useState(() => {
+    const rule1 = randomRule();
+    const rule2 = level >= 40 ? randomRule(rule1) : null;
+    const rounds = Array.from({ length: ROUNDS }, (_, r) => {
+      const rule = rule2 && r >= RULE_CHANGE_ROUND ? rule2 : rule1;
+      return { rule, figures: makeRoundFigures(rule, figureCount, targetCount) };
+    });
+    return { rule2, rounds };
+  });
+
+  const [phase, setPhase] = useState<Phase>({ kind: 'rule', round: 0 });
+  const [remainingMs, setRemainingMs] = useState(roundMs);
+  const [tapped, setTapped] = useState<Set<number>>(new Set());      // objetivos acertados
+  const [wrongTapped, setWrongTapped] = useState<Set<number>>(new Set()); // distractores tocados
+
   const hitsRef = useRef(0);
   const falseAlarmsRef = useRef(0);
-  const correctRejectionsRef = useRef(0);
-  const reactionsRef = useRef<number[]>([]);
-  const shownAtRef = useRef(0);
-  const startedAtRef = useRef(Date.now());
+  const targetsTotalRef = useRef(0);
+  const hitTimesRef = useRef<number[]>([]);
+  const roundStartRef = useRef(0);
+  const roundEndedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef(Date.now());
   const finishedRef = useRef(false);
-  const showMs = showDuration(level);
-  const size = stimulusSize(level);
+
+  const endRound = (round: number, completed: boolean) => {
+    if (roundEndedRef.current) return;
+    roundEndedRef.current = true;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    targetsTotalRef.current += targetCount;
+    setPhase({ kind: 'roundEnd', round, completed });
+  };
 
   useEffect(() => {
-    const clear = () => {
+    const clearAll = () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
 
-    if (phase.kind === 'show') {
-      respondedRef.current = false;
-      shownAtRef.current = Date.now();
+    if (phase.kind === 'rule') {
       timerRef.current = setTimeout(() => {
-        if (!sequence[phase.index].isTarget) correctRejectionsRef.current += 1;
-        setPhase({ kind: 'gap', index: phase.index });
-      }, showMs);
-    } else if (phase.kind === 'gap') {
+        setTapped(new Set());
+        setWrongTapped(new Set());
+        roundEndedRef.current = false;
+        roundStartRef.current = Date.now();
+        setRemainingMs(roundMs);
+        setPhase({ kind: 'play', round: phase.round });
+      }, RULE_MS);
+    } else if (phase.kind === 'play') {
+      intervalRef.current = setInterval(() => {
+        const left = roundMs - (Date.now() - roundStartRef.current);
+        if (left <= 0) {
+          endRound(phase.round, false);
+        } else {
+          setRemainingMs(left);
+        }
+      }, TICK_MS);
+    } else if (phase.kind === 'roundEnd') {
       timerRef.current = setTimeout(() => {
-        const next = phase.index + 1;
-        if (next < STIMULI) setPhase({ kind: 'show', index: next });
-        else setPhase({ kind: 'done' });
-      }, GAP_MS);
+        const next = phase.round + 1;
+        if (next >= ROUNDS) {
+          setPhase({ kind: 'done' });
+        } else if (setup.rule2 && next === RULE_CHANGE_ROUND) {
+          setPhase({ kind: 'rule', round: next });
+        } else {
+          setTapped(new Set());
+          setWrongTapped(new Set());
+          roundEndedRef.current = false;
+          roundStartRef.current = Date.now();
+          setRemainingMs(roundMs);
+          setPhase({ kind: 'play', round: next });
+        }
+      }, ROUND_END_MS);
     } else if (phase.kind === 'done' && !finishedRef.current) {
       finishedRef.current = true;
-      const accuracy = Math.round(
-        ((hitsRef.current + correctRejectionsRef.current) / STIMULI) * 100
+      const decisions = targetsTotalRef.current + falseAlarmsRef.current;
+      const accuracy = decisions
+        ? Math.round((hitsRef.current / decisions) * 100)
+        : 0;
+      const rts = hitTimesRef.current;
+      const speedBonus = rts.reduce(
+        (acc, t) => acc + Math.max(0, Math.round((roundMs - t) / 100)),
+        0
       );
-      const rts = reactionsRef.current;
       onFinish({
         gameId,
         level,
-        score: Math.max(0, hitsRef.current * 100 - falseAlarmsRef.current * 50),
+        score: Math.max(0, hitsRef.current * 100 - falseAlarmsRef.current * 50 + speedBonus),
         accuracy,
         avgReactionMs: rts.length
           ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length)
@@ -124,50 +236,93 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
       });
     }
 
-    return clear;
-  }, [phase, sequence, showMs, gameId, level, onFinish]);
+    return clearAll;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
-  const handleTap = () => {
-    if (phase.kind !== 'show' || respondedRef.current) return;
-    respondedRef.current = true;
-    if (timerRef.current) clearTimeout(timerRef.current);
+  const handleFigure = (f: Figure) => {
+    if (phase.kind !== 'play') return;
 
-    const stim = sequence[phase.index];
-    if (stim.isTarget) {
+    if (f.isTarget) {
+      if (tapped.has(f.id)) return;
+      const next = new Set(tapped);
+      next.add(f.id);
+      setTapped(next);
       hitsRef.current += 1;
-      reactionsRef.current.push(Date.now() - shownAtRef.current);
+      hitTimesRef.current.push(Date.now() - roundStartRef.current);
+      if (next.size === targetCount) endRound(phase.round, true);
     } else {
+      if (wrongTapped.has(f.id)) return;
+      const next = new Set(wrongTapped);
+      next.add(f.id);
+      setWrongTapped(next);
       falseAlarmsRef.current += 1;
     }
-    setPhase({ kind: 'gap', index: phase.index });
   };
 
-  const stim = phase.kind === 'show' ? sequence[phase.index] : null;
-  const progressIndex =
-    phase.kind === 'done' ? STIMULI : Math.min(phase.index + 1, STIMULI);
+  if (phase.kind === 'rule') {
+    const rule = setup.rounds[phase.round].rule;
+    return (
+      <View style={styles.container}>
+        {phase.round > 0 && <Text style={styles.ruleChange}>¡CAMBIO DE REGLA!</Text>}
+        <Text style={styles.ruleBig}>{ruleText(rule)}</Text>
+      </View>
+    );
+  }
+
+  if (phase.kind === 'done') {
+    return <View style={styles.container} />;
+  }
+
+  const roundData = setup.rounds[phase.round];
+  if (!roundData) return <View style={styles.container} />; // guarda defensiva
+  const { rule, figures } = roundData;
+  const isEnd = phase.kind === 'roundEnd';
 
   return (
-    <Pressable style={styles.container} onPress={handleTap}>
+    <View style={styles.container}>
       <Text style={styles.progress}>
-        {progressIndex} de {STIMULI} · nivel {level}
+        Ronda {phase.round + 1} de {ROUNDS} · nivel {level}
       </Text>
-      <Text style={styles.rule}>Tocá SOLO los círculos verdes</Text>
-      <View style={styles.stage}>
-        {stim && (
-          <View
-            style={{
-              position: 'absolute',
-              top: `${stim.topPct}%`,
-              left: `${stim.leftPct}%`,
-              width: size,
-              height: size,
-              backgroundColor: COLOR_HEX[stim.color],
-              borderRadius: stim.shape === 'circle' ? size / 2 : Math.round(size / 8),
-            }}
-          />
-        )}
+      <View style={styles.headerRow}>
+        <Text style={styles.rule}>{ruleText(rule)}</Text>
+        <Text style={[styles.timer, remainingMs <= 1500 && styles.timerUrgent]}>
+          {isEnd
+            ? phase.completed
+              ? '¡Completado!'
+              : 'Tiempo'
+            : `${(remainingMs / 1000).toFixed(1)}s`}
+        </Text>
       </View>
-    </Pressable>
+      <View style={styles.stage}>
+        {figures.map((f) => {
+          if (tapped.has(f.id)) return null; // acertadas desaparecen
+          const missed = isEnd && f.isTarget; // al terminar, se marcan las que faltaron
+          const wrong = wrongTapped.has(f.id);
+          return (
+            <Pressable
+              key={f.id}
+              onPress={() => handleFigure(f)}
+              style={{
+                position: 'absolute',
+                top: `${f.topPct}%`,
+                left: `${f.leftPct}%`,
+                width: size,
+                height: size,
+                backgroundColor: COLOR_HEX[f.color],
+                borderRadius: f.shape === 'circle' ? size / 2 : Math.round(size / 8),
+                borderWidth: wrong || missed ? 3 : 0,
+                borderColor: wrong ? '#FFFFFF' : colors.danger,
+                opacity: wrong ? 0.45 : 1,
+                ...(f.shape === 'diamond'
+                  ? { transform: [{ rotate: '45deg' }] }
+                  : {}),
+              }}
+            />
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -178,21 +333,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: spacing.xl * 2,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   progress: {
     color: colors.textMuted,
     fontSize: 13,
     letterSpacing: 1,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
   rule: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  timer: {
     color: colors.textMuted,
     fontSize: 15,
+    fontVariant: ['tabular-nums'],
+    minWidth: 50,
+  },
+  timerUrgent: {
+    color: colors.danger,
+    fontWeight: '700',
+  },
+  ruleBig: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl * 2,
+  },
+  ruleChange: {
+    color: colors.danger,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginTop: spacing.xl * 2,
+    marginBottom: -spacing.xl,
   },
   stage: {
     flex: 1,
     alignSelf: 'stretch',
-    margin: spacing.lg,
+    margin: spacing.md,
     position: 'relative',
   },
 });
