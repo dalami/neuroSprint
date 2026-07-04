@@ -1,4 +1,7 @@
+import { BiggerNumberGame } from '../bigger-number/BiggerNumberGame';
+import { FlashCountGame } from '../flash-count/FlashCountGame';
 import { LogicSeriesGame } from '../logic-series/LogicSeriesGame';
+import { MemoryPairsGame } from '../memory-pairs/MemoryPairsGame';
 import { MentalMathGame } from '../mental-math/MentalMathGame';
 import { NBackGame } from '../n-back/NBackGame';
 import { ParityGame } from '../parity/ParityGame';
@@ -7,6 +10,7 @@ import { ReflexesGame } from '../reflexes/ReflexesGame';
 import { SelectiveAttentionGame } from '../selective-attention/SelectiveAttentionGame';
 import { SpatialRotationGame } from '../spatial-rotation/SpatialRotationGame';
 import { StroopGame } from '../stroop/StroopGame';
+import { SymmetryGame } from '../symmetry/SymmetryGame';
 import { TargetSumGame } from '../target-sum/TargetSumGame';
 import { VisualMemoryGame } from '../visual-memory/VisualMemoryGame';
 import { VisualSpeedGame } from '../visual-speed/VisualSpeedGame';
@@ -99,6 +103,30 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
     skill: 'calculo',
     instructions: 'Tocá los números que sumados dan exactamente el objetivo, antes de que se acabe el tiempo.',
     component: TargetSumGame,
+  },
+  memory_pairs: {
+    name: 'Memoria de parejas',
+    skill: 'memoria',
+    instructions: 'Destapá las cartas de a dos y encontrá todas las parejas antes de que se acabe el tiempo.',
+    component: MemoryPairsGame,
+  },
+  flash_count: {
+    name: 'Conteo relámpago',
+    skill: 'visual',
+    instructions: 'Las figuras aparecen por un instante. Contalas y elegí cuántas había.',
+    component: FlashCountGame,
+  },
+  symmetry: {
+    name: 'Simetría',
+    skill: 'visual',
+    instructions: 'Decidí rápido si la figura es simétrica como un espejo. Las diferencias pueden ser de una sola celda.',
+    component: SymmetryGame,
+  },
+  bigger_number: {
+    name: 'El mayor engañoso',
+    skill: 'logica',
+    instructions: 'Tocá el número mayor. Ojo: el tamaño en pantalla engaña — el número más chico puede verse enorme.',
+    component: BiggerNumberGame,
   },
 };
 

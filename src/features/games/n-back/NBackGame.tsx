@@ -4,7 +4,7 @@ import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
 
 const LENGTH = 18;
-const FEEDBACK_MS = 300;
+const FEEDBACK_MS = 650;
 
 type Shape = 'circle' | 'square' | 'diamond';
 
@@ -49,6 +49,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
   const [sequence] = useState<number[]>(() => makeSequence(n));
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<'igual' | 'distinto' | 'timeout' | null>(null);
+  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
   const limit = timeLimitMs(level);
   const [remainingMs, setRemainingMs] = useState(limit);
 
@@ -79,6 +80,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
 
   const goNext = () => {
     setChosen(null);
+    setLastCorrect(null);
     if (index + 1 < LENGTH) setIndex(index + 1);
     else finish();
   };
@@ -106,6 +108,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
         clearInterval(interval);
         answeredRef.current = true;
         setChosen('timeout'); // sin respuesta = error
+        setLastCorrect(false);
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -126,7 +129,9 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
     answeredRef.current = true;
     setChosen(answer);
     const isMatch = sequence[index] === sequence[index - n];
-    if ((answer === 'igual') === isMatch) correctRef.current += 1;
+    const good = (answer === 'igual') === isMatch;
+    if (good) correctRef.current += 1;
+    setLastCorrect(good);
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
 
@@ -160,7 +165,22 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
       </View>
       {!isMemorize && (
         <>
-          <Text style={styles.timer}>{(remainingMs / 1000).toFixed(1)}s</Text>
+          {chosen !== null ? (
+            <Text
+              style={[
+                styles.feedback,
+                { color: lastCorrect ? colors.success : colors.danger },
+              ]}
+            >
+              {lastCorrect
+                ? '✓'
+                : chosen === 'timeout'
+                  ? `¡Tiempo! Era ${sequence[index] === sequence[index - n] ? 'IGUAL' : 'DISTINTO'}`
+                  : `✗ Era ${sequence[index] === sequence[index - n] ? 'IGUAL' : 'DISTINTO'}`}
+            </Text>
+          ) : (
+            <Text style={styles.timer}>{(remainingMs / 1000).toFixed(1)}s</Text>
+          )}
           <View style={styles.buttonsRow}>
             <Pressable
               onPress={() => handle('igual')}
@@ -211,6 +231,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
     fontVariant: ['tabular-nums'],
+  },
+  feedback: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   buttonsRow: {
     flexDirection: 'row',

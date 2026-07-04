@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GAME_REGISTRY } from '../games/engine/registry';
@@ -10,9 +10,13 @@ import { colors, radius, spacing } from '../../theme';
 
 const ALL_GAMES = Object.keys(GAME_REGISTRY) as GameId[];
 
-function pickNext(exclude?: GameId): GameId {
-  const pool = exclude ? ALL_GAMES.filter((g) => g !== exclude) : ALL_GAMES;
-  return pool[Math.floor(Math.random() * pool.length)];
+function shuffle<T>(arr: readonly T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 type Phase =
@@ -35,9 +39,22 @@ export function InfiniteMode({ onExit }: Props) {
   // Punto de partida: niveles oficiales del servidor (solo lectura)
   const progress = useGameProgress();
   const [runLevels, setRunLevels] = useState<GameLevels | null>(null);
+
+  // Bolsa en memoria: ningún juego se repite hasta agotar los 16.
+  // Al remezclar, el recién jugado queda al fondo (nunca dos seguidos).
+  const bagRef = useRef<GameId[]>([]);
+  const drawGame = (lastPlayed?: GameId): GameId => {
+    if (bagRef.current.length === 0) {
+      const rest = shuffle(ALL_GAMES.filter((g) => g !== lastPlayed));
+      if (lastPlayed) rest.push(lastPlayed);
+      bagRef.current = rest;
+    }
+    return bagRef.current.shift() as GameId;
+  };
+
   const [phase, setPhase] = useState<Phase>(() => ({
     kind: 'intro',
-    gameId: pickNext(),
+    gameId: drawGame(),
     lastResult: null,
   }));
   const [gamesPlayed, setGamesPlayed] = useState(0);
@@ -74,7 +91,7 @@ export function InfiniteMode({ onExit }: Props) {
         ? { ...prev, [result.gameId]: applyLadder(prev[result.gameId], result.accuracy) }
         : prev
     );
-    setPhase({ kind: 'intro', gameId: pickNext(result.gameId), lastResult: result });
+    setPhase({ kind: 'intro', gameId: drawGame(result.gameId), lastResult: result });
   };
 
   if (phase.kind === 'intro') {

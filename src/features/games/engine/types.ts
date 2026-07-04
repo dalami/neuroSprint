@@ -18,6 +18,10 @@ export const ALL_GAME_IDS = [
   'parity',
   'n_back',
   'target_sum',
+  'memory_pairs',
+  'flash_count',
+  'symmetry',
+  'bigger_number',
 ] as const;
 
 export type GameId = (typeof ALL_GAME_IDS)[number];
