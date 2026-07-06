@@ -3,6 +3,7 @@ import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const TOTAL_ROUNDS = 5;
 const TIMEOUT_MS = 2000;
@@ -83,6 +84,7 @@ export function ReflexesGame({ gameId, level, onFinish }: GameProps) {
     } else if (phase.kind === 'go') {
       timerRef.current = setTimeout(() => {
         reactionsRef.current.push(null);
+        playWrong();
         setPhase({ kind: 'feedback', round: phase.round, message: 'Muy tarde', good: false });
       }, TIMEOUT_MS);
     } else if (phase.kind === 'feedback') {
@@ -125,6 +127,7 @@ export function ReflexesGame({ gameId, level, onFinish }: GameProps) {
   const failRound = (round: number, message: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     reactionsRef.current.push(null);
+    playWrong();
     setPhase({ kind: 'feedback', round, message, good: false });
   };
 
@@ -142,6 +145,8 @@ export function ReflexesGame({ gameId, level, onFinish }: GameProps) {
       const rt = Date.now() - goAtRef.current;
       reactionsRef.current.push(rt);
       const good = rt <= threshold;
+      if (good) playCorrect();
+      else playWrong();
       setPhase({
         kind: 'feedback',
         round: phase.round,

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const QUESTIONS = 4;
 const FEEDBACK_MS = 900;
@@ -171,7 +173,12 @@ export function SpatialRotationGame({ gameId, level, onFinish }: GameProps) {
   const handleOption = (optIndex: number) => {
     if (chosen !== null) return;
     setChosen(optIndex);
-    if (optIndex === questions[index].correctIndex) correctRef.current += 1;
+    if (optIndex === questions[index].correctIndex) {
+      correctRef.current += 1;
+      playCorrect();
+    } else {
+      playWrong();
+    }
 
     timerRef.current = setTimeout(() => {
       setChosen(null);
@@ -207,6 +214,11 @@ export function SpatialRotationGame({ gameId, level, onFinish }: GameProps) {
           ? '¿Cuál es la misma figura, ROTADA? (las espejadas no valen)'
           : '¿Cuál es la figura ESPEJADA? (las rotaciones no valen)'}
       </Text>
+      <Animated.View
+        key={`q-${index}`}
+        entering={FadeInDown.duration(220)}
+        style={styles.questionBlock}
+      >
       <MiniGrid grid={q.target} cellSize={targetCell} />
       <View style={styles.optionsGrid}>
         {q.options.map((opt, i) => {
@@ -230,6 +242,7 @@ export function SpatialRotationGame({ gameId, level, onFinish }: GameProps) {
           );
         })}
       </View>
+      </Animated.View>
     </View>
   );
 }
@@ -253,6 +266,11 @@ const styles = StyleSheet.create({
   hint: {
     color: colors.textMuted,
     fontSize: 15,
+  },
+  questionBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.lg,
   },
   optionsGrid: {
     flexDirection: 'row',

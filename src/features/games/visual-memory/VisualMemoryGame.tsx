@@ -3,6 +3,7 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 3;
 const FEEDBACK_MS = 1100;
@@ -141,6 +142,8 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
         });
         hitsTotalRef.current += hits;
         targetsTotalRef.current += targetsArr.length;
+        if (hits === targetsArr.length) playCorrect();
+        else playWrong();
         setPhase('feedback');
       }
       return;
@@ -153,6 +156,7 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
       if (nextProgress === targetsArr.length) {
         hitsTotalRef.current += targetsArr.length;
         targetsTotalRef.current += targetsArr.length;
+        playCorrect();
         setPhase('feedback');
       }
     } else {
@@ -160,6 +164,7 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
       hitsTotalRef.current += progress;
       targetsTotalRef.current += targetsArr.length;
       setWrongCell(cell);
+      playWrong();
       setPhase('feedback');
     }
   };

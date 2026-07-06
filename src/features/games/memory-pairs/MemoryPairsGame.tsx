@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playTick, playWrong } from '../../../lib/sounds';
 
 const FLIP_BACK_MS = 700;
 const TICK_MS = 200;
@@ -52,6 +54,7 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
   const [over, setOver] = useState(false);
 
   const attemptsRef = useRef(0);
+  const lastSecondRef = useRef(99);
   const startedAtRef = useRef(Date.now());
   const flipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const endTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,14 +90,21 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
       }, PEEK_MS);
       return () => clearTimeout(t);
     }
+    lastSecondRef.current = 99;
     intervalRef.current = setInterval(() => {
       const left = totalMs - (Date.now() - startedAtRef.current);
       if (left <= 0) {
         if (intervalRef.current) clearInterval(intervalRef.current);
         setRemainingMs(0);
+        if (!finishedRef.current) playWrong();
         finish(matchedPairsCount());
       } else {
         setRemainingMs(left);
+        const sec = Math.ceil(left / 1000);
+        if (sec !== lastSecondRef.current) {
+          lastSecondRef.current = sec;
+          if (sec <= 3) playTick();
+        }
       }
     }, TICK_MS);
     return () => {
@@ -120,6 +130,7 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
       attemptsRef.current += 1;
       const [a, b] = next;
       if (deck[a].symbol === deck[b].symbol) {
+        playCorrect();
         const nextMatched = new Set(matched);
         nextMatched.add(a);
         nextMatched.add(b);
@@ -146,6 +157,10 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
           const faceUp = peeking || matched.has(i) || revealed.includes(i);
           return (
             <View key={i} style={{ width: '23%', aspectRatio: 0.8, padding: 3 }}>
+              <Animated.View
+                entering={ZoomIn.duration(150).delay(i * 20)}
+                style={styles.cardWrap}
+              >
               <Pressable
                 onPress={() => handleCard(i)}
                 style={[
@@ -156,6 +171,7 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
               >
                 <Text style={styles.cardText}>{faceUp ? card.symbol : '?'}</Text>
               </Pressable>
+              </Animated.View>
             </View>
           );
         })}
@@ -185,6 +201,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignSelf: 'stretch',
+  },
+  cardWrap: {
+    flex: 1,
   },
   card: {
     flex: 1,

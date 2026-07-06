@@ -3,6 +3,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playTick, playWrong } from '../../../lib/sounds';
 
 const QUESTIONS = 8;
 const FEEDBACK_MS = 500;
@@ -166,6 +167,7 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
 
   const correctRef = useRef(0);
   const answeredRef = useRef(false);
+  const lastSecondRef = useRef(99);
   const startedAtRef = useRef(Date.now());
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishedRef = useRef(false);
@@ -194,6 +196,7 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
   // Cuenta regresiva por pregunta
   useEffect(() => {
     answeredRef.current = false;
+    lastSecondRef.current = 99;
     setRemainingMs(limit);
     const startedQ = Date.now();
     const interval = setInterval(() => {
@@ -206,9 +209,15 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
         clearInterval(interval);
         answeredRef.current = true;
         setChosen('timeout'); // cuenta como error
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
+        const sec = Math.ceil(left / 1000);
+        if (sec !== lastSecondRef.current) {
+          lastSecondRef.current = sec;
+          if (sec <= 3) playTick();
+        }
       }
     }, 100);
     return () => clearInterval(interval);
@@ -232,7 +241,13 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
     if (chosen !== null || answeredRef.current) return;
     answeredRef.current = true;
     setChosen(value);
-    if (isCorrectAnswer(questions[index], value)) correctRef.current += 1;
+    const good = isCorrectAnswer(questions[index], value);
+    if (good) {
+      correctRef.current += 1;
+      playCorrect();
+    } else {
+      playWrong();
+    }
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
 

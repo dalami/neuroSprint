@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 5;
 const FEEDBACK_MS = 700;
@@ -176,7 +178,12 @@ export function FlashCountGame({ gameId, level, onFinish }: GameProps) {
   const handleOption = (value: number) => {
     if (phase !== 'question' || chosen !== null) return;
     setChosen(value);
-    if (value === rounds[round].answer) correctRef.current += 1;
+    if (value === rounds[round].answer) {
+      correctRef.current += 1;
+      playCorrect();
+    } else {
+      playWrong();
+    }
     setPhase('feedback');
   };
 
@@ -209,7 +216,11 @@ export function FlashCountGame({ gameId, level, onFinish }: GameProps) {
           </View>
         </>
       ) : (
-        <>
+        <Animated.View
+          key={`q-${round}`}
+          entering={FadeInDown.duration(220)}
+          style={styles.questionBlock}
+        >
           <Text style={styles.question}>{current.question}</Text>
           <View style={styles.optionsRow}>
             {current.options.map((opt) => {
@@ -233,7 +244,7 @@ export function FlashCountGame({ gameId, level, onFinish }: GameProps) {
               );
             })}
           </View>
-        </>
+        </Animated.View>
       )}
     </View>
   );
@@ -257,6 +268,10 @@ const styles = StyleSheet.create({
   hint: {
     color: colors.textMuted,
     fontSize: 15,
+  },
+  questionBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
   },
   question: {
     color: colors.text,

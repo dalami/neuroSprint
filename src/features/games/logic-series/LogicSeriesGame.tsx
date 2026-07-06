@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const QUESTIONS = 6;
 const FEEDBACK_MS = 600;
@@ -133,7 +135,12 @@ export function LogicSeriesGame({ gameId, level, onFinish }: GameProps) {
   const handleAnswer = (value: number, good: boolean) => {
     if (chosen !== null) return;
     setChosen(value);
-    if (good) correctRef.current += 1;
+    if (good) {
+      correctRef.current += 1;
+      playCorrect();
+    } else {
+      playWrong();
+    }
 
     timerRef.current = setTimeout(() => {
       setChosen(null);
@@ -160,6 +167,11 @@ export function LogicSeriesGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         {index + 1} de {QUESTIONS} · nivel {level}
       </Text>
+      <Animated.View
+        key={`q-${index}`}
+        entering={FadeInDown.duration(220)}
+        style={styles.questionBlock}
+      >
       <Text style={styles.hint}>
         {q.kind === 'next' ? '¿Qué número sigue?' : '¿Cuál NO pertenece a la serie?'}
       </Text>
@@ -212,6 +224,7 @@ export function LogicSeriesGame({ gameId, level, onFinish }: GameProps) {
           })}
         </View>
       )}
+      </Animated.View>
     </View>
   );
 }
@@ -235,6 +248,11 @@ const styles = StyleSheet.create({
   hint: {
     color: colors.textMuted,
     fontSize: 15,
+  },
+  questionBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.xl,
   },
   series: {
     color: colors.text,

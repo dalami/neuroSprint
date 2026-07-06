@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const LENGTH = 18;
 const FEEDBACK_MS = 650;
@@ -111,6 +113,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
         answeredRef.current = true;
         setChosen('timeout'); // sin respuesta = error
         setLastCorrect(false);
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -132,7 +135,12 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
     setChosen(answer);
     const isMatch = sequence[index] === sequence[index - n];
     const good = (answer === 'igual') === isMatch;
-    if (good) correctRef.current += 1;
+    if (good) {
+      correctRef.current += 1;
+      playCorrect();
+    } else {
+      playWrong();
+    }
     setLastCorrect(good);
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
@@ -153,6 +161,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
             : `¿Es igual a la de hace ${n} figuras?`}
       </Text>
       <View style={styles.stage}>
+        <Animated.View key={`f-${index}`} entering={ZoomIn.duration(150)}>
         <View
           style={{
             width: size,
@@ -164,6 +173,7 @@ export function NBackGame({ gameId, level, onFinish }: GameProps) {
               : {}),
           }}
         />
+        </Animated.View>
       </View>
       {!isMemorize && (
         <>

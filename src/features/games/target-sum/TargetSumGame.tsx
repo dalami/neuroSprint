@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playTick, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 5;
 const FEEDBACK_MS = 900;
@@ -63,6 +65,7 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
   const timeBonusRef = useRef(0);
   const roundStartRef = useRef(Date.now());
   const roundEndedRef = useRef(false);
+  const lastSecondRef = useRef(99);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startedAtRef = useRef(Date.now());
@@ -79,6 +82,9 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
       successesRef.current += 1;
       const elapsed = Date.now() - roundStartRef.current;
       timeBonusRef.current += Math.max(0, Math.round((roundMs - elapsed) / 100));
+      playCorrect();
+    } else {
+      playWrong();
     }
     setSucceeded(success);
     setPhase('feedback');
@@ -93,6 +99,7 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
     if (phase === 'play') {
       roundEndedRef.current = false;
       roundStartRef.current = Date.now();
+      lastSecondRef.current = 99;
       setRemainingMs(roundMs);
       intervalRef.current = setInterval(() => {
         const left = roundMs - (Date.now() - roundStartRef.current);
@@ -100,6 +107,11 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
           endRound(false);
         } else {
           setRemainingMs(left);
+          const sec = Math.ceil(left / 1000);
+          if (sec !== lastSecondRef.current) {
+            lastSecondRef.current = sec;
+            if (sec <= 3) playTick();
+          }
         }
       }, TICK_MS);
     } else {
@@ -155,7 +167,9 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
           ? 'Tocá los números que suman exactamente'
           : 'Bajá este número EXACTO a cero, restando'}
       </Text>
-      <Text style={styles.target}>{current.target}</Text>
+      <Animated.View key={`t-${round}`} entering={FadeInDown.duration(220)}>
+        <Text style={styles.target}>{current.target}</Text>
+      </Animated.View>
       <Text
         style={[
           styles.sum,
@@ -175,8 +189,11 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
       </Text>
       <View style={styles.grid}>
         {current.tiles.map((value, i) => (
+          <Animated.View
+            key={`tile-${round}-${i}`}
+            entering={ZoomIn.duration(150).delay(i * 30)}
+          >
           <Pressable
-            key={i}
             onPress={() => handleTile(i)}
             style={({ pressed }) => [
               styles.tile,
@@ -188,6 +205,7 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
               {value}
             </Text>
           </Pressable>
+          </Animated.View>
         ))}
       </View>
     </View>

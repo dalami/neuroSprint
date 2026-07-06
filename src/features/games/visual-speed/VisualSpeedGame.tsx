@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 5;
 
@@ -69,6 +71,9 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
     if (cell === current.oddIndex) {
       hitsRef.current += 1;
       reactionsRef.current.push(rt);
+      playCorrect();
+    } else {
+      playWrong();
     }
     // acierto o error, la ronda se consume (un solo intento)
 
@@ -106,7 +111,11 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
         Ronda {round + 1} de {ROUNDS} · nivel {level}
       </Text>
       <Text style={styles.hint}>Tocá la figura DISTINTA (color, tamaño o forma)</Text>
-      <View style={styles.grid}>
+      <Animated.View
+        key={`round-${round}`}
+        entering={FadeIn.duration(120)}
+        style={styles.grid}
+      >
         {Array.from({ length: cells }, (_, cell) => (
           <View
             key={cell}
@@ -128,7 +137,7 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
             />
           </View>
         ))}
-      </View>
+      </Animated.View>
     </View>
   );
 }

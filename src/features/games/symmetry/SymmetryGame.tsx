@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
 
@@ -130,6 +132,7 @@ export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
         answeredRef.current = true;
         setChosen('timeout');
         setLastCorrect(false);
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -153,6 +156,9 @@ export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
     if (good) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
+      playCorrect();
+    } else {
+      playWrong();
     }
     setLastCorrect(good);
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
@@ -170,7 +176,7 @@ export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.hint}>
         ¿Simétrica respecto al eje {axis === 'vertical' ? 'VERTICAL (izq/der)' : 'HORIZONTAL (arriba/abajo)'}?
       </Text>
-      <View>
+      <Animated.View key={`g-${index}`} entering={ZoomIn.duration(150)}>
         {q.grid.map((row, r) => (
           <View key={r} style={{ flexDirection: 'row' }}>
             {row.map((cell, c) => (
@@ -187,7 +193,7 @@ export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
             ))}
           </View>
         ))}
-      </View>
+      </Animated.View>
       <Text
         style={[
           styles.feedback,

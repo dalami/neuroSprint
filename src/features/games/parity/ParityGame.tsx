@@ -3,6 +3,7 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const COUNT = 16;
 const FEEDBACK_MS = 250;
@@ -133,6 +134,7 @@ export function ParityGame({ gameId, level, onFinish }: GameProps) {
         clearInterval(interval);
         answeredRef.current = true;
         setChosen('timeout');
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -156,6 +158,9 @@ export function ParityGame({ gameId, level, onFinish }: GameProps) {
     if ((button === 'A') === correctIsA) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
+      playCorrect();
+    } else {
+      playWrong();
     }
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };

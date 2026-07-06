@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const COUNT = 12;
 const FEEDBACK_MS = 350;
@@ -104,6 +106,7 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
         clearInterval(interval);
         answeredRef.current = true;
         setChosen('timeout');
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -130,6 +133,9 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
     if (side === correctSide) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
+      playCorrect();
+    } else {
+      playWrong();
     }
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
@@ -154,7 +160,11 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.hint}>
         Tocá el número {rule === 'mayor' ? 'MAYOR' : 'MENOR'} (el tamaño engaña)
       </Text>
-      <View style={styles.row}>
+      <Animated.View
+        key={`r-${index}`}
+        entering={FadeInDown.duration(150)}
+        style={styles.row}
+      >
         <Pressable
           onPress={() => handle('left')}
           style={({ pressed }) => [
@@ -189,7 +199,7 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
             {q.right}
           </Text>
         </Pressable>
-      </View>
+      </Animated.View>
     </View>
   );
 }

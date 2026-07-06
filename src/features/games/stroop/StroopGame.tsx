@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const QUESTIONS = 10;
 const FEEDBACK_MS = 400;
@@ -104,6 +106,7 @@ export function StroopGame({ gameId, level, onFinish }: GameProps) {
         clearInterval(interval);
         answeredRef.current = true;
         setChosen('timeout');
+        playWrong();
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -129,6 +132,9 @@ export function StroopGame({ gameId, level, onFinish }: GameProps) {
     if (inkId === answerFor(questions[index])) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
+      playCorrect();
+    } else {
+      playWrong();
     }
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
@@ -145,7 +151,9 @@ export function StroopGame({ gameId, level, onFinish }: GameProps) {
           ? 'Tocá el color de la TINTA (no lo que dice)'
           : 'Tocá el color que la palabra DICE (no la tinta)'}
       </Text>
-      <Text style={[styles.word, { color: q.inkHex }]}>{q.word}</Text>
+      <Animated.View key={`w-${index}`} entering={ZoomIn.duration(150)}>
+        <Text style={[styles.word, { color: q.inkHex }]}>{q.word}</Text>
+      </Animated.View>
       <View style={styles.optionsRow}>
         {INKS.map((ink) => {
           const showResult =

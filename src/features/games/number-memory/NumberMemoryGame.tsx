@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 3;
 const FEEDBACK_MS = 1400;
@@ -108,6 +110,8 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
       }
       hitsRef.current += hits;
       totalRef.current += target.length;
+      if (hits === target.length) playCorrect();
+      else playWrong();
       setPhase('feedback');
     }
   };
@@ -122,12 +126,18 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
       {phase === 'show' && (
         <>
           <Text style={styles.hint}>Memorizá</Text>
-          <Text style={styles.number}>{target}</Text>
+          <Animated.View key={`show-${round}`} entering={ZoomIn.duration(220)}>
+            <Text style={styles.number}>{target}</Text>
+          </Animated.View>
         </>
       )}
 
       {phase === 'input' && (
-        <>
+        <Animated.View
+          key={`input-${round}`}
+          entering={FadeInUp.duration(220)}
+          style={styles.inputBlock}
+        >
           <Text style={styles.hint}>
             {reverse ? '¡Escribilo AL REVÉS!' : 'Escribilo de memoria'}
           </Text>
@@ -149,7 +159,7 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
               </Pressable>
             ))}
           </View>
-        </>
+        </Animated.View>
       )}
 
       {phase === 'feedback' && (
@@ -206,6 +216,11 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: '700',
     letterSpacing: 6,
+  },
+  inputBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.md,
   },
   keypad: {
     flexDirection: 'row',

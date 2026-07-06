@@ -3,6 +3,7 @@ import Animated, { ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
+import { playCorrect, playTick, playWrong } from '../../../lib/sounds';
 
 const ROUNDS = 5;
 const RULE_CHANGE_ROUND = 3; // desde nivel 40, la regla cambia en la ronda 4
@@ -183,6 +184,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
   const hitTimesRef = useRef<number[]>([]);
   const roundStartRef = useRef(0);
   const roundEndedRef = useRef(false);
+  const lastSecondRef = useRef(99);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(Date.now());
@@ -214,6 +216,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
         setWrongTapped(new Set());
         roundEndedRef.current = false;
         roundStartRef.current = Date.now();
+        lastSecondRef.current = 99;
         setRemainingMs(effRoundMs);
         setPhase({ kind: 'play', round: phase.round });
       }, RULE_MS);
@@ -221,9 +224,15 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
       intervalRef.current = setInterval(() => {
         const left = effRoundMs - (Date.now() - roundStartRef.current);
         if (left <= 0) {
+          playWrong();
           endRound(phase.round, false);
         } else {
           setRemainingMs(left);
+          const sec = Math.ceil(left / 1000);
+          if (sec !== lastSecondRef.current) {
+            lastSecondRef.current = sec;
+            if (sec <= 3) playTick();
+          }
         }
       }, TICK_MS);
     } else if (phase.kind === 'roundEnd') {
@@ -238,6 +247,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
           setWrongTapped(new Set());
           roundEndedRef.current = false;
           roundStartRef.current = Date.now();
+          lastSecondRef.current = 99;
           setRemainingMs(effRoundMs);
           setPhase({ kind: 'play', round: next });
         }
@@ -282,6 +292,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
       setTapped(next);
       hitsRef.current += 1;
       hitTimesRef.current.push(Date.now() - roundStartRef.current);
+      playCorrect();
       if (next.size === setup.perRoundTargets) endRound(phase.round, true);
     } else {
       if (wrongTapped.has(f.id)) return;
@@ -289,6 +300,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
       next.add(f.id);
       setWrongTapped(next);
       falseAlarmsRef.current += 1;
+      playWrong();
     }
   };
 
