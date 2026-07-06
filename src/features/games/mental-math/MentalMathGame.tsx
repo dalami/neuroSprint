@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
 
 const QUESTIONS = 8;
 const FEEDBACK_MS = 500;
-const TIMEOUT_SENTINEL = -1; // valor imposible como opción: marca "se acabó el tiempo"
 
-interface Question {
-  text: string;
-  answer: number;
-  options: number[];
-}
+type Op = '+' | '−' | '×';
+
+type Question =
+  | { kind: 'options'; text: string; answer: number; options: number[] }
+  | { kind: 'tf'; text: string; isTrue: boolean }
+  | { kind: 'missing'; text: string; answer: Op };
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -23,7 +24,7 @@ function timeLimitMs(level: number): number {
 }
 
 /** Dificultad por bandas de nivel. Generación procedural: no hay banco de preguntas. */
-function makeQuestion(level: number): Question {
+function makeExpression(level: number): { text: string; answer: number } {
   let text: string;
   let answer: number;
 
@@ -95,16 +96,63 @@ function makeQuestion(level: number): Question {
     }
   }
 
-  // 3 distractores cercanos al resultado, únicos y no negativos
+  return { text, answer };
+}
+
+/**
+ * Variantes (se sortean POR PREGUNTA entre las desbloqueadas):
+ * - options: elegir el resultado (clásica)
+ * - tf:      "a op b = c" ¿verdadero o falso?  (nivel 10+)
+ * - missing: "a ¿? b = c" ¿qué operador falta? (nivel 18+)
+ */
+function makeQuestion(level: number): Question {
+  const kinds: Array<Question['kind']> = ['options'];
+  if (level >= 10) kinds.push('tf');
+  if (level >= 18) kinds.push('missing');
+  const kind = kinds[randInt(0, kinds.length - 1)];
+
+  if (kind === 'tf') {
+    const { text, answer } = makeExpression(level);
+    const isTrue = Math.random() < 0.5;
+    const shown = isTrue
+      ? answer
+      : answer +
+        (Math.random() < 0.5 ? -1 : 1) *
+          randInt(1, Math.max(2, Math.round(Math.abs(answer) * 0.12)));
+    return { kind: 'tf', text: `${text} = ${shown}`, isTrue: shown === answer };
+  }
+
+  if (kind === 'missing') {
+    // a ¿? b = c, garantizando que un solo operador dé ese resultado
+    for (let guard = 0; guard < 50; guard++) {
+      const a = randInt(2, 9 + Math.floor(level / 8));
+      const b = randInt(2, 9 + Math.floor(level / 8));
+      const results: Record<Op, number> = { '+': a + b, '−': a - b, '×': a * b };
+      const op: Op = (['+', '−', '×'] as Op[])[randInt(0, 2)];
+      const c = results[op];
+      const collisions = (Object.keys(results) as Op[]).filter(
+        (o) => results[o] === c
+      );
+      if (collisions.length === 1) {
+        return { kind: 'missing', text: `${a} ¿? ${b} = ${c}`, answer: op };
+      }
+    }
+    // fallback improbable: pregunta clásica
+  }
+
+  const { text, answer } = makeExpression(level);
   const opts = new Set<number>([answer]);
   while (opts.size < 4) {
     const delta = randInt(1, Math.max(3, Math.round(Math.abs(answer) * 0.15)));
     const candidate = answer + (Math.random() < 0.5 ? -delta : delta);
     if (candidate >= 0) opts.add(candidate);
   }
-  const options = [...opts].sort(() => Math.random() - 0.5);
-
-  return { text, answer, options };
+  return {
+    kind: 'options',
+    text,
+    answer,
+    options: [...opts].sort(() => Math.random() - 0.5),
+  };
 }
 
 export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
@@ -112,8 +160,8 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
     Array.from({ length: QUESTIONS }, () => makeQuestion(level))
   );
   const [index, setIndex] = useState(0);
-  // null = esperando respuesta; TIMEOUT_SENTINEL = se acabó el tiempo; otro = opción tocada
-  const [chosen, setChosen] = useState<number | null>(null);
+  // null = esperando; 'timeout' = se acabó el tiempo; otro = lo que tocó
+  const [chosen, setChosen] = useState<number | string | null>(null);
   const [remainingMs, setRemainingMs] = useState(() => timeLimitMs(level));
 
   const correctRef = useRef(0);
@@ -157,7 +205,7 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
       if (left <= 0) {
         clearInterval(interval);
         answeredRef.current = true;
-        setChosen(TIMEOUT_SENTINEL); // cuenta como error
+        setChosen('timeout'); // cuenta como error
         feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
       } else {
         setRemainingMs(left);
@@ -174,16 +222,39 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
     };
   }, []);
 
-  const handleOption = (value: number) => {
+  const isCorrectAnswer = (q: Question, value: number | string): boolean => {
+    if (q.kind === 'options') return value === q.answer;
+    if (q.kind === 'tf') return (value === 'V') === q.isTrue;
+    return value === q.answer;
+  };
+
+  const handleAnswer = (value: number | string) => {
     if (chosen !== null || answeredRef.current) return;
     answeredRef.current = true;
     setChosen(value);
-    if (value === questions[index].answer) correctRef.current += 1;
+    if (isCorrectAnswer(questions[index], value)) correctRef.current += 1;
     feedbackTimerRef.current = setTimeout(goNext, FEEDBACK_MS);
   };
 
   const q = questions[index];
   const seconds = Math.ceil(remainingMs / 1000);
+
+  const optionButtons = (): Array<{ label: string; value: number | string }> => {
+    if (q.kind === 'options') {
+      return q.options.map((o) => ({ label: String(o), value: o }));
+    }
+    if (q.kind === 'tf') {
+      return [
+        { label: 'VERDADERO', value: 'V' },
+        { label: 'FALSO', value: 'F' },
+      ];
+    }
+    return [
+      { label: '+', value: '+' },
+      { label: '−', value: '−' },
+      { label: '×', value: '×' },
+    ];
+  };
 
   return (
     <View style={styles.container}>
@@ -191,18 +262,27 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
         {index + 1} de {QUESTIONS} · nivel {level}
       </Text>
       <Text style={[styles.timer, seconds <= 2 && styles.timerUrgent]}>
-        {chosen === TIMEOUT_SENTINEL ? '¡Tiempo!' : `${seconds}s`}
+        {chosen === 'timeout' ? '¡Tiempo!' : `${seconds}s`}
       </Text>
+      <Animated.View
+        key={`q-${index}`}
+        entering={FadeInDown.duration(220)}
+        style={styles.questionBlock}
+      >
+      {q.kind === 'tf' && <Text style={styles.kindHint}>¿Es correcto?</Text>}
+      {q.kind === 'missing' && (
+        <Text style={styles.kindHint}>¿Qué operador falta?</Text>
+      )}
       <Text style={styles.question}>{q.text}</Text>
       <View style={styles.optionsGrid}>
-        {q.options.map((opt) => {
-          const isChosen = chosen === opt;
-          const showResult = chosen !== null && (isChosen || opt === q.answer);
-          const good = opt === q.answer;
+        {optionButtons().map((opt) => {
+          const good = isCorrectAnswer(q, opt.value);
+          const showResult =
+            chosen !== null && (chosen === opt.value || good);
           return (
             <Pressable
-              key={opt}
-              onPress={() => handleOption(opt)}
+              key={String(opt.value)}
+              onPress={() => handleAnswer(opt.value)}
               style={({ pressed }) => [
                 styles.option,
                 pressed && chosen === null && styles.optionPressed,
@@ -211,11 +291,12 @@ export function MentalMathGame({ gameId, level, onFinish }: GameProps) {
                 },
               ]}
             >
-              <Text style={styles.optionText}>{opt}</Text>
+              <Text style={styles.optionText}>{opt.label}</Text>
             </Pressable>
           );
         })}
       </View>
+      </Animated.View>
     </View>
   );
 }
@@ -246,8 +327,17 @@ const styles = StyleSheet.create({
   },
   question: {
     color: colors.text,
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: '700',
+  },
+  kindHint: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  questionBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.xl,
   },
   optionsGrid: {
     flexDirection: 'row',

@@ -43,6 +43,10 @@ function makeQuestion(level: number): Question {
 }
 
 export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
+  // La consigna se sortea: buscar el MAYOR o el MENOR
+  const [rule] = useState<'mayor' | 'menor'>(() =>
+    level >= 8 && Math.random() < 0.5 ? 'menor' : 'mayor'
+  );
   const [questions] = useState<Question[]>(() =>
     Array.from({ length: COUNT }, () => makeQuestion(level))
   );
@@ -121,7 +125,9 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
     setChosen(side);
     const q = questions[index];
     const biggerSide = q.left > q.right ? 'left' : 'right';
-    if (side === biggerSide) {
+    const correctSide =
+      rule === 'mayor' ? biggerSide : biggerSide === 'left' ? 'right' : 'left';
+    if (side === correctSide) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
     }
@@ -130,10 +136,12 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
 
   const q = questions[index];
   const biggerSide = q.left > q.right ? 'left' : 'right';
+  const correctSide =
+    rule === 'mayor' ? biggerSide : biggerSide === 'left' ? 'right' : 'left';
 
   const sideStyle = (side: 'left' | 'right') => {
     if (chosen === null) return null;
-    if (side === biggerSide) return { borderColor: colors.success, borderWidth: 3 };
+    if (side === correctSide) return { borderColor: colors.success, borderWidth: 3 };
     if (side === chosen) return { borderColor: colors.danger, borderWidth: 3 };
     return null;
   };
@@ -143,7 +151,9 @@ export function BiggerNumberGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         {index + 1} de {COUNT} · nivel {level} · {(remainingMs / 1000).toFixed(1)}s
       </Text>
-      <Text style={styles.hint}>Tocá el número MAYOR (el tamaño engaña)</Text>
+      <Text style={styles.hint}>
+        Tocá el número {rule === 'mayor' ? 'MAYOR' : 'MENOR'} (el tamaño engaña)
+      </Text>
       <View style={styles.row}>
         <Pressable
           onPress={() => handle('left')}

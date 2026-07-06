@@ -9,11 +9,15 @@ const TICK_MS = 200;
 const SYMBOLS = ['🍎', '🌙', '⭐', '🍀', '🔔', '🎈', '🐟', '🔑', '☂️', '🎲'];
 
 /** Más parejas y menos tiempo por pareja a mayor nivel */
-function config(level: number) {
+function config(level: number, peek: boolean) {
   const pairs = Math.min(10, 4 + Math.floor(level / 18));
-  const totalMs = pairs * Math.max(3000, 6500 - level * 35);
+  const base = pairs * Math.max(3000, 6500 - level * 35);
+  // con vistazo inicial, el reloj es mucho más corto
+  const totalMs = peek ? Math.round(base * 0.55) : base;
   return { pairs, totalMs };
 }
+
+const PEEK_MS = 2000;
 
 interface Card {
   symbol: string;
@@ -36,7 +40,10 @@ function makeDeck(pairs: number): Card[] {
 }
 
 export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
-  const { pairs, totalMs } = config(level);
+  // Variante: vistazo inicial de 2s con todas las cartas, pero menos tiempo
+  const [peek] = useState(() => level >= 10 && Math.random() < 0.5);
+  const { pairs, totalMs } = config(level, peek);
+  const [peeking, setPeeking] = useState(peek);
 
   const [deck] = useState<Card[]>(() => makeDeck(pairs));
   const [revealed, setRevealed] = useState<number[]>([]);
@@ -71,8 +78,15 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
     }, 900);
   };
 
-  // Reloj total del tablero
+  // Reloj total del tablero (arranca después del vistazo, si lo hay)
   useEffect(() => {
+    if (peeking) {
+      const t = setTimeout(() => {
+        setPeeking(false);
+        startedAtRef.current = Date.now();
+      }, PEEK_MS);
+      return () => clearTimeout(t);
+    }
     intervalRef.current = setInterval(() => {
       const left = totalMs - (Date.now() - startedAtRef.current);
       if (left <= 0) {
@@ -89,14 +103,14 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
       if (endTimerRef.current) clearTimeout(endTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [peeking]);
 
   const matchedRef = useRef(matched);
   matchedRef.current = matched;
   const matchedPairsCount = () => matchedRef.current.size / 2;
 
   const handleCard = (i: number) => {
-    if (over || matched.has(i) || revealed.includes(i) || revealed.length === 2) {
+    if (peeking || over || matched.has(i) || revealed.includes(i) || revealed.length === 2) {
       return;
     }
     const next = [...revealed, i];
@@ -123,12 +137,13 @@ export function MemoryPairsGame({ gameId, level, onFinish }: GameProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.progress}>
-        Parejas {matched.size / 2} de {pairs} · nivel {level} ·{' '}
-        {(remainingMs / 1000).toFixed(0)}s
+        {peeking
+          ? '¡MEMORIZÁ EL TABLERO!'
+          : `Parejas ${matched.size / 2} de ${pairs} · nivel ${level} · ${(remainingMs / 1000).toFixed(0)}s`}
       </Text>
       <View style={styles.grid}>
         {deck.map((card, i) => {
-          const faceUp = matched.has(i) || revealed.includes(i);
+          const faceUp = peeking || matched.has(i) || revealed.includes(i);
           return (
             <View key={i} style={{ width: '23%', aspectRatio: 0.8, padding: 3 }}>
               <Pressable

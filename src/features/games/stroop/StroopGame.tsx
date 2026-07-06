@@ -20,9 +20,12 @@ function timeLimitMs(level: number): number {
   return Math.max(1500, 4000 - level * 25);
 }
 
+type StroopVariant = 'ink' | 'word';
+
 interface Question {
-  word: string;   // lo que DICE
-  inkId: InkId;   // el color de la TINTA (la respuesta correcta)
+  word: string;    // lo que DICE
+  wordId: InkId;   // el color que la palabra nombra
+  inkId: InkId;    // el color de la TINTA
   inkHex: string;
 }
 
@@ -35,10 +38,16 @@ function makeQuestion(level: number): Question {
     const others = INKS.filter((i) => i.id !== wordEntry.id);
     ink = others[Math.floor(Math.random() * others.length)];
   }
-  return { word: wordEntry.word, inkId: ink.id, inkHex: ink.hex };
+  return { word: wordEntry.word, wordId: wordEntry.id, inkId: ink.id, inkHex: ink.hex };
+}
+
+function pickVariant(level: number): StroopVariant {
+  // 'word' (responder por lo que DICE) se sortea desde nivel 10
+  return level >= 10 && Math.random() < 0.5 ? 'word' : 'ink';
 }
 
 export function StroopGame({ gameId, level, onFinish }: GameProps) {
+  const [variant] = useState<StroopVariant>(() => pickVariant(level));
   const [questions] = useState<Question[]>(() =>
     Array.from({ length: QUESTIONS }, () => makeQuestion(level))
   );
@@ -110,11 +119,14 @@ export function StroopGame({ gameId, level, onFinish }: GameProps) {
     };
   }, []);
 
+  const answerFor = (q: Question): InkId =>
+    variant === 'ink' ? q.inkId : q.wordId;
+
   const handleInk = (inkId: InkId) => {
     if (chosen !== null || answeredRef.current) return;
     answeredRef.current = true;
     setChosen(inkId);
-    if (inkId === questions[index].inkId) {
+    if (inkId === answerFor(questions[index])) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
     }
@@ -128,13 +140,17 @@ export function StroopGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         {index + 1} de {QUESTIONS} · nivel {level} · {(remainingMs / 1000).toFixed(1)}s
       </Text>
-      <Text style={styles.hint}>Tocá el color de la TINTA (no lo que dice)</Text>
+      <Text style={styles.hint}>
+        {variant === 'ink'
+          ? 'Tocá el color de la TINTA (no lo que dice)'
+          : 'Tocá el color que la palabra DICE (no la tinta)'}
+      </Text>
       <Text style={[styles.word, { color: q.inkHex }]}>{q.word}</Text>
       <View style={styles.optionsRow}>
         {INKS.map((ink) => {
           const showResult =
-            chosen !== null && (chosen === ink.id || ink.id === q.inkId);
-          const good = ink.id === q.inkId;
+            chosen !== null && (chosen === ink.id || ink.id === answerFor(q));
+          const good = ink.id === answerFor(q);
           return (
             <Pressable
               key={ink.id}

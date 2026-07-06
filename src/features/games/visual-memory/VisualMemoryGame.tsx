@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
@@ -12,17 +13,18 @@ const FEEDBACK_MS = 1100;
  * - sequence (35+): las celdas se iluminan UNA POR UNA y hay que
  *   repetir el orden exacto (estilo Simon). Un error corta la ronda.
  */
-function config(level: number) {
+export type MemoryMode = 'static' | 'inverse' | 'sequence';
+
+function config(level: number, mode: MemoryMode) {
   const gridSize = level <= 10 ? 3 : level <= 25 ? 4 : level <= 45 ? 5 : 6;
   const cells = gridSize * gridSize;
-  const mode: 'static' | 'sequence' = level >= 35 ? 'sequence' : 'static';
   const targets =
-    mode === 'static'
-      ? Math.min(Math.floor(cells * 0.45), 3 + Math.floor((level - 1) / 5))
-      : Math.min(9, 4 + Math.floor((level - 35) / 6));
-  const showMs = Math.max(700, 1600 - (level - 1) * 12); // static: exposición total
-  const stepMs = Math.max(350, 700 - (level - 35) * 5);  // sequence: por celda
-  return { gridSize, cells, mode, targets, showMs, stepMs };
+    mode === 'sequence'
+      ? Math.min(9, 4 + Math.floor(Math.max(0, level - 20) / 6))
+      : Math.min(Math.floor(cells * 0.45), 3 + Math.floor((level - 1) / 5));
+  const showMs = Math.max(700, 1600 - (level - 1) * 12); // static/inverse: exposición total
+  const stepMs = Math.max(350, 700 - Math.max(0, level - 20) * 5); // sequence: por celda
+  return { gridSize, cells, targets, showMs, stepMs };
 }
 
 /** Celdas únicas en orden aleatorio (Fisher-Yates + slice) */
@@ -38,7 +40,14 @@ function sampleOrdered(cells: number, count: number): number[] {
 type Phase = 'show' | 'recall' | 'feedback';
 
 export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
-  const { gridSize, cells, mode, targets: targetCount, showMs, stepMs } = config(level);
+  // La consigna se sortea entre los modos desbloqueados
+  const [mode] = useState<MemoryMode>(() => {
+    const modes: MemoryMode[] = ['static'];
+    if (level >= 8) modes.push('inverse');
+    if (level >= 20) modes.push('sequence');
+    return modes[Math.floor(Math.random() * modes.length)];
+  });
+  const { gridSize, cells, targets: targetCount, showMs, stepMs } = config(level, mode);
 
   const [round, setRound] = useState(0);
   const [phase, setPhase] = useState<Phase>('show');
@@ -97,7 +106,7 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
     };
 
     if (phase === 'show') {
-      if (mode === 'static') {
+      if (mode !== 'sequence') {
         timerRef.current = setTimeout(() => setPhase('recall'), showMs);
       } else {
         // secuencia: avanzar de celda en celda
@@ -120,7 +129,7 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
   const handleCell = (cell: number) => {
     if (phase !== 'recall') return;
 
-    if (mode === 'static') {
+    if (mode !== 'sequence') {
       if (selected.has(cell)) return;
       const nextSelected = new Set(selected);
       nextSelected.add(cell);
@@ -156,9 +165,12 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
   };
 
   const cellStyle = (cell: number) => {
-    if (mode === 'static') {
+    if (mode !== 'sequence') {
       if (phase === 'show') {
-        return targetsSet.has(cell) ? styles.cellTarget : styles.cellIdle;
+        // invertido: se iluminan las OTRAS; hay que recordar las apagadas
+        const lit =
+          mode === 'inverse' ? !targetsSet.has(cell) : targetsSet.has(cell);
+        return lit ? styles.cellTarget : styles.cellIdle;
       }
       if (phase === 'recall') {
         return selected.has(cell) ? styles.cellSelected : styles.cellIdle;
@@ -188,18 +200,22 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
     phase === 'show'
       ? mode === 'sequence'
         ? 'Memorizá el orden'
-        : 'Memorizá'
+        : mode === 'inverse'
+          ? 'Memorizá las APAGADAS'
+          : 'Memorizá'
       : phase === 'recall'
         ? mode === 'sequence'
           ? 'Repetí el orden'
-          : 'Marcá las celdas'
+          : mode === 'inverse'
+            ? 'Marcá las que estaban apagadas'
+            : 'Marcá las celdas'
         : '';
 
   return (
     <View style={styles.container}>
       <Text style={styles.progress}>
         Ronda {round + 1} de {ROUNDS} · nivel {level}
-        {mode === 'sequence' ? ' · SECUENCIA' : ''}
+        {mode === 'sequence' ? ' · SECUENCIA' : mode === 'inverse' ? ' · INVERTIDO' : ''}
       </Text>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.grid}>
@@ -208,10 +224,16 @@ export function VisualMemoryGame({ gameId, level, onFinish }: GameProps) {
             key={cell}
             style={{ width: `${100 / gridSize}%`, aspectRatio: 1, padding: 3 }}
           >
-            <Pressable
-              style={[styles.cellBase, cellStyle(cell)]}
-              onPress={() => handleCell(cell)}
-            />
+            <Animated.View
+              key={`r${round}-c${cell}`}
+              entering={ZoomIn.delay(cell * 12).duration(180)}
+              style={{ flex: 1 }}
+            >
+              <Pressable
+                style={[styles.cellBase, cellStyle(cell)]}
+                onPress={() => handleCell(cell)}
+              />
+            </Animated.View>
           </View>
         ))}
       </View>

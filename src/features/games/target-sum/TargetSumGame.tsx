@@ -46,6 +46,10 @@ type Phase = 'play' | 'feedback';
 export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
   const { subsetSize, tileCount, roundMs } = config(level);
 
+  // La consigna se sortea: sumar hasta el objetivo o bajarlo exacto a cero
+  const [variant] = useState<'sum' | 'reduce'>(() =>
+    level >= 12 && Math.random() < 0.5 ? 'reduce' : 'sum'
+  );
   const [rounds] = useState<RoundData[]>(() =>
     Array.from({ length: ROUNDS }, () => makeRound(level, subsetSize, tileCount))
   );
@@ -146,7 +150,11 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
         Ronda {round + 1} de {ROUNDS} · nivel {level} ·{' '}
         {(remainingMs / 1000).toFixed(1)}s
       </Text>
-      <Text style={styles.hint}>Tocá los números que suman exactamente</Text>
+      <Text style={styles.hint}>
+        {variant === 'sum'
+          ? 'Tocá los números que suman exactamente'
+          : 'Bajá este número EXACTO a cero, restando'}
+      </Text>
       <Text style={styles.target}>{current.target}</Text>
       <Text
         style={[
@@ -161,7 +169,9 @@ export function TargetSumGame({ gameId, level, onFinish }: GameProps) {
           ? succeeded
             ? '¡Exacto!'
             : 'Tiempo'
-          : `Llevás: ${sum}`}
+          : variant === 'sum'
+            ? `Llevás: ${sum}`
+            : `Quedan: ${current.target - sum}`}
       </Text>
       <View style={styles.grid}>
         {current.tiles.map((value, i) => (

@@ -45,8 +45,8 @@ export default function HomeScreen() {
         <Text style={styles.statMock}>📈 {profile.data?.xp ?? '—'} XP</Text>
       </View>
 
-      <Pressable onPress={() => router.push('/infinite')}>
-        <Text style={styles.link}>Modo infinito →</Text>
+      <Pressable onPress={() => router.push('/stats')}>
+        <Text style={styles.statsLink}>Ver mis estadísticas →</Text>
       </Pressable>
 
       <Pressable onPress={() => supabase.auth.signOut()}>
@@ -104,10 +104,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 16,
   },
-  link: {
-    color: colors.textMuted,
+  statsLink: {
+    color: colors.primary,
     fontSize: 15,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     textDecorationLine: 'underline',
   },
   linkSmall: {

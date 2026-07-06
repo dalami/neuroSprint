@@ -46,7 +46,7 @@ interface Question {
   correctIndex: number;
 }
 
-function makeQuestion(size: number): Question {
+function makeQuestion(size: number, kind: 'rotated' | 'mirrored'): Question {
   // Figura asimétrica: sus 4 rotaciones deben ser todas distintas
   // y su espejo no debe coincidir con ninguna rotación.
   let target = randomGrid(size);
@@ -63,21 +63,30 @@ function makeQuestion(size: number): Question {
   for (let i = 0; i < 3; i++) rotations.push(rotate(rotations[i]));
   const rotSet = new Set(rotations.map(serialize));
 
-  // Opción correcta: una rotación no trivial (90, 180 o 270)
-  const correct = rotations[1 + Math.floor(Math.random() * 3)];
+  // Familia de espejos: por la asimetría garantizada, disjunta de las rotaciones
+  const mirrors: Grid[] = [];
+  let mm = mirror(target);
+  for (let i = 0; i < 4; i++) {
+    mirrors.push(mm);
+    mm = rotate(mm);
+  }
+  const mirrorSet = new Set(mirrors.map(serialize));
 
-  // Distractores: espejos rotados y mutaciones, nunca iguales a una rotación
+  // Correcta: rotación no trivial (modo rotada) o un espejo (modo espejada)
+  const correct =
+    kind === 'rotated'
+      ? rotations[1 + Math.floor(Math.random() * 3)]
+      : mirrors[Math.floor(Math.random() * mirrors.length)];
+
+  // Distractores: la familia opuesta, nunca la familia de la correcta
+  const correctFamily = kind === 'rotated' ? rotSet : mirrorSet;
   const distractors: Grid[] = [];
   const used = new Set<string>([serialize(correct)]);
-  const candidates: Grid[] = [];
-  let m = mirror(target);
-  for (let i = 0; i < 4; i++) {
-    candidates.push(m);
-    m = rotate(m);
-  }
+  const candidates: Grid[] =
+    kind === 'rotated' ? mirrors : rotations.slice(1);
   for (const c of candidates) {
     const s = serialize(c);
-    if (!rotSet.has(s) && !used.has(s)) {
+    if (!correctFamily.has(s) && !used.has(s)) {
       distractors.push(c);
       used.add(s);
       if (distractors.length === 3) break;
@@ -87,9 +96,12 @@ function makeQuestion(size: number): Question {
   let guard = 0;
   while (distractors.length < 3 && guard < 100) {
     guard++;
-    const c = mutate(rotations[Math.floor(Math.random() * 4)]);
+    const base = (kind === 'rotated' ? rotations : mirrors)[
+      Math.floor(Math.random() * 4)
+    ];
+    const c = mutate(base);
     const s = serialize(c);
-    if (!rotSet.has(s) && !used.has(s)) {
+    if (!correctFamily.has(s) && !used.has(s)) {
       distractors.push(c);
       used.add(s);
     }
@@ -135,8 +147,12 @@ function MiniGrid({ grid, cellSize }: { grid: Grid; cellSize: number }) {
 export function SpatialRotationGame({ gameId, level, onFinish }: GameProps) {
   const size = matrixSize(level);
 
+  // La consigna se sortea: buscar la ROTADA o la ESPEJADA (desde nivel 15)
+  const [kind] = useState<'rotated' | 'mirrored'>(() =>
+    level >= 15 && Math.random() < 0.5 ? 'mirrored' : 'rotated'
+  );
   const [questions] = useState<Question[]>(() =>
-    Array.from({ length: QUESTIONS }, () => makeQuestion(size))
+    Array.from({ length: QUESTIONS }, () => makeQuestion(size, kind))
   );
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<number | null>(null);
@@ -186,7 +202,11 @@ export function SpatialRotationGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         {index + 1} de {QUESTIONS} · nivel {level}
       </Text>
-      <Text style={styles.hint}>¿Cuál es la misma figura, rotada?</Text>
+      <Text style={styles.hint}>
+        {kind === 'rotated'
+          ? '¿Cuál es la misma figura, ROTADA? (las espejadas no valen)'
+          : '¿Cuál es la figura ESPEJADA? (las rotaciones no valen)'}
+      </Text>
       <MiniGrid grid={q.target} cellSize={targetCell} />
       <View style={styles.optionsGrid}>
         {q.options.map((opt, i) => {

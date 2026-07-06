@@ -16,21 +16,30 @@ function timeLimitMs(level: number): number {
   return Math.max(1200, 3000 - level * 18);
 }
 
-function isSymmetric(g: Grid): boolean {
+type Axis = 'vertical' | 'horizontal';
+
+function isSymmetric(g: Grid, axis: Axis): boolean {
   const size = g.length;
   for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size / 2; c++) {
-      if (g[r][c] !== g[r][size - 1 - c]) return false;
+    for (let c = 0; c < size; c++) {
+      const mirror = axis === 'vertical' ? g[r][size - 1 - c] : g[size - 1 - r][c];
+      if (g[r][c] !== mirror) return false;
     }
   }
   return true;
 }
 
-function makeSymmetric(size: number): Grid {
-  return Array.from({ length: size }, () => {
-    const half = Array.from({ length: size / 2 }, () => Math.random() < 0.5);
-    return [...half, ...[...half].reverse()];
-  });
+function makeSymmetric(size: number, axis: Axis): Grid {
+  if (axis === 'vertical') {
+    return Array.from({ length: size }, () => {
+      const half = Array.from({ length: size / 2 }, () => Math.random() < 0.5);
+      return [...half, ...[...half].reverse()];
+    });
+  }
+  const topHalf: Grid = Array.from({ length: size / 2 }, () =>
+    Array.from({ length: size }, () => Math.random() < 0.5)
+  );
+  return [...topHalf, ...[...topHalf].reverse().map((row) => [...row])];
 }
 
 interface Question {
@@ -39,9 +48,9 @@ interface Question {
 }
 
 /** Las asimétricas nacen simétricas y se les cambian 1-2 celdas: sutiles */
-function makeQuestion(level: number, size: number): Question {
+function makeQuestion(level: number, size: number, axis: Axis): Question {
   const symmetric = Math.random() < 0.5;
-  const grid = makeSymmetric(size);
+  const grid = makeSymmetric(size, axis);
   if (!symmetric) {
     const flips = level >= 40 ? 1 : 2; // a mayor nivel, más sutil
     for (let k = 0; k < flips; k++) {
@@ -50,17 +59,21 @@ function makeQuestion(level: number, size: number): Question {
       grid[r][c] = !grid[r][c];
     }
     // Si por azar los cambios se cancelaron y quedó simétrica, forzamos uno
-    if (isSymmetric(grid)) {
+    if (isSymmetric(grid, axis)) {
       grid[0][0] = !grid[0][0];
     }
   }
-  return { grid, symmetric: isSymmetric(grid) };
+  return { grid, symmetric: isSymmetric(grid, axis) };
 }
 
 export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
   const size = gridSize(level);
+  // El eje del espejo se sortea por partida (horizontal desde nivel 10)
+  const [axis] = useState<Axis>(() =>
+    level >= 10 && Math.random() < 0.5 ? 'horizontal' : 'vertical'
+  );
   const [questions] = useState<Question[]>(() =>
-    Array.from({ length: QUESTIONS }, () => makeQuestion(level, size))
+    Array.from({ length: QUESTIONS }, () => makeQuestion(level, size, axis))
   );
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<'si' | 'no' | 'timeout' | null>(null);
@@ -154,7 +167,9 @@ export function SymmetryGame({ gameId, level, onFinish }: GameProps) {
         {index + 1} de {QUESTIONS} · nivel {level} ·{' '}
         {(remainingMs / 1000).toFixed(1)}s
       </Text>
-      <Text style={styles.hint}>¿La figura es simétrica (espejo vertical)?</Text>
+      <Text style={styles.hint}>
+        ¿Simétrica respecto al eje {axis === 'vertical' ? 'VERTICAL (izq/der)' : 'HORIZONTAL (arriba/abajo)'}?
+      </Text>
       <View>
         {q.grid.map((row, r) => (
           <View key={r} style={{ flexDirection: 'row' }}>

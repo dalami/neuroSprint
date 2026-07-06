@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +8,12 @@ import { getSessionSequence } from '../games/engine/sessionSequence';
 import { GAME_REGISTRY } from '../games/engine/registry';
 import type { GameId, GameResult } from '../games/engine/types';
 import { useGameProgress, type GameLevels } from '../profile/useProfile';
+import {
+  clearPendingSession,
+  loadPendingSession,
+  savePendingSession,
+  todayKey,
+} from './pendingSession';
 import { colors, radius, spacing } from '../../theme';
 
 type Phase =
@@ -19,8 +26,25 @@ type Phase =
 
 interface Props {
   onExit: () => void;
-  /** Si se provee, el resumen ofrece "Seguir jugando" (modo infinito) */
-  onContinue?: () => void;
+}
+
+/** Cuenta de 0 al objetivo en durationMs (para el XP del resumen) */
+function useCountUp(target: number, durationMs = 800): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (target <= 0) {
+      setValue(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / durationMs);
+      setValue(Math.round(target * t));
+      if (t >= 1) clearInterval(interval);
+    }, 40);
+    return () => clearInterval(interval);
+  }, [target, durationMs]);
+  return value;
 }
 
 /**
@@ -30,7 +54,7 @@ interface Props {
  * (new_level); el cliente solo lo refleja. Requiere conexión (decisión MVP):
  * ante un fallo se ofrece reintentar la misma operación.
  */
-export function TrainingSession({ onExit, onContinue }: Props) {
+export function TrainingSession({ onExit }: Props) {
   const [sequence, setSequence] = useState<GameId[] | null>(null);
   const progress = useGameProgress();
   const queryClient = useQueryClient();
@@ -38,13 +62,10 @@ export function TrainingSession({ onExit, onContinue }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'starting' });
   const [levels, setLevels] = useState<GameLevels | null>(null);
   const [results, setResults] = useState<GameResult[]>([]);
+  const [resumedAt, setResumedAt] = useState<number | null>(null);
+  const shownXp = useCountUp(phase.kind === 'summary' ? phase.xpEarned : 0);
   const sessionIdRef = useRef<string | null>(null);
   const startedRef = useRef(false);
-
-  // Secuencia de esta sesión (aleatoria, sin repetir la sesión anterior)
-  useEffect(() => {
-    getSessionSequence().then(setSequence);
-  }, []);
 
   // Punto de partida: niveles del servidor
   useEffect(() => {
@@ -53,8 +74,18 @@ export function TrainingSession({ onExit, onContinue }: Props) {
     }
   }, [progress.data, levels]);
 
-  const startSession = async () => {
+  /**
+   * Sesión NUEVA: sortea la secuencia (la bolsa garantiza variedad),
+   * la abre en el servidor y guarda el señalador local para poder
+   * retomarla si la app se cierra a medias.
+   */
+  const startFresh = async () => {
     setPhase({ kind: 'starting' });
+    setResults([]);
+    setResumedAt(null);
+    setSequence(null);
+    const seq = await getSessionSequence();
+    setSequence(seq);
     const { data, error } = await supabase.rpc('start_training_session', {
       p_kind: 'daily',
     });
@@ -62,18 +93,99 @@ export function TrainingSession({ onExit, onContinue }: Props) {
       setPhase({
         kind: 'error',
         message: 'No se pudo iniciar la sesión. Verificá tu conexión.',
-        retry: startSession,
+        retry: startFresh,
       });
       return;
     }
     sessionIdRef.current = data as string;
+    await savePendingSession({
+      sessionId: data as string,
+      sequence: seq,
+      day: todayKey(),
+    });
     setPhase({ kind: 'intro', index: 0 });
+  };
+
+  /**
+   * Al entrar: si hay una sesión de HOY abierta en el servidor, se retoma
+   * donde quedó. Lo ya jugado se reconstruye desde game_results (fuente de
+   * verdad); el señalador local solo aporta el id y la secuencia.
+   */
+  const beginOrResume = async () => {
+    setPhase({ kind: 'starting' });
+    const pending = await loadPendingSession();
+
+    if (!pending || pending.day !== todayKey()) {
+      // sin señalador, o quedó de otro día: se descarta y arranca fresco
+      if (pending) await clearPendingSession();
+      await startFresh();
+      return;
+    }
+
+    // ¿La sesión sigue abierta en el servidor?
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from('training_sessions')
+      .select('id')
+      .eq('id', pending.sessionId)
+      .is('completed_at', null)
+      .maybeSingle();
+
+    if (sessionError) {
+      setPhase({
+        kind: 'error',
+        message: 'No se pudo verificar tu sesión anterior. Verificá tu conexión.',
+        retry: beginOrResume,
+      });
+      return;
+    }
+    if (!sessionRow) {
+      await clearPendingSession();
+      await startFresh();
+      return;
+    }
+
+    // Reconstruir lo ya jugado desde el servidor
+    const { data: rows, error: resultsError } = await supabase
+      .from('game_results')
+      .select('game_id, level, score, accuracy, avg_reaction_ms, duration_seconds')
+      .eq('session_id', pending.sessionId)
+      .order('created_at', { ascending: true });
+
+    if (resultsError) {
+      setPhase({
+        kind: 'error',
+        message: 'No se pudo recuperar tu sesión anterior. Verificá tu conexión.',
+        retry: beginOrResume,
+      });
+      return;
+    }
+
+    const previous: GameResult[] = (rows ?? []).map((r) => ({
+      gameId: r.game_id as GameId,
+      level: r.level,
+      score: r.score,
+      accuracy: Math.round(Number(r.accuracy)),
+      avgReactionMs: r.avg_reaction_ms ?? undefined,
+      durationSeconds: r.duration_seconds ?? 0,
+    }));
+
+    sessionIdRef.current = pending.sessionId;
+    setSequence(pending.sequence);
+    setResults(previous);
+
+    if (previous.length >= pending.sequence.length) {
+      // se jugó todo; solo faltaba cerrar la sesión
+      closeSession();
+    } else {
+      setResumedAt(previous.length);
+      setPhase({ kind: 'intro', index: previous.length });
+    }
   };
 
   useEffect(() => {
     if (progress.data && !startedRef.current) {
       startedRef.current = true;
-      startSession();
+      beginOrResume();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress.data]);
@@ -125,7 +237,8 @@ export function TrainingSession({ onExit, onContinue }: Props) {
       return;
     }
     const res = data as { xp_earned: number; streak_days: number };
-    // El home y el modo infinito releen datos frescos del servidor
+    await clearPendingSession();
+    // El home y las estadísticas releen datos frescos del servidor
     queryClient.invalidateQueries({ queryKey: ['profile'] });
     queryClient.invalidateQueries({ queryKey: ['gameProgress'] });
     setPhase({ kind: 'summary', xpEarned: res.xp_earned, streakDays: res.streak_days });
@@ -183,17 +296,26 @@ export function TrainingSession({ onExit, onContinue }: Props) {
     const game = GAME_REGISTRY[gameId];
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.step}>
-          Juego {phase.index + 1} de {sequence.length} · Nivel {levels[gameId]}
-        </Text>
-        <Text style={styles.title}>{game.name}</Text>
-        <Text style={styles.instructions}>{game.instructions}</Text>
-        <Pressable
-          onPress={() => setPhase({ kind: 'playing', index: phase.index })}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        <Animated.View
+          key={`intro-${phase.index}`}
+          entering={FadeInDown.duration(350)}
+          style={styles.animatedBlock}
         >
-          <Text style={styles.buttonText}>EMPEZAR</Text>
-        </Pressable>
+          {resumedAt === phase.index && (
+            <Text style={styles.resumedNote}>Retomando donde dejaste</Text>
+          )}
+          <Text style={styles.step}>
+            Juego {phase.index + 1} de {sequence.length} · Nivel {levels[gameId]}
+          </Text>
+          <Text style={styles.title}>{game.name}</Text>
+          <Text style={styles.instructions}>{game.instructions}</Text>
+          <Pressable
+            onPress={() => setPhase({ kind: 'playing', index: phase.index })}
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+          >
+            <Text style={styles.buttonText}>EMPEZAR</Text>
+          </Pressable>
+        </Animated.View>
       </SafeAreaView>
     );
   }
@@ -203,11 +325,17 @@ export function TrainingSession({ onExit, onContinue }: Props) {
     const Game = GAME_REGISTRY[gameId].component;
     return (
       <SafeAreaView style={styles.container}>
-        <Game
-          gameId={gameId}
-          level={levels[gameId]}
-          onFinish={(r) => submitResult(r, phase.index)}
-        />
+        <Animated.View
+          key={`game-${phase.index}`}
+          entering={FadeIn.duration(250)}
+          style={styles.gameWrap}
+        >
+          <Game
+            gameId={gameId}
+            level={levels[gameId]}
+            onFinish={(r) => submitResult(r, phase.index)}
+          />
+        </Animated.View>
       </SafeAreaView>
     );
   }
@@ -215,16 +343,22 @@ export function TrainingSession({ onExit, onContinue }: Props) {
   // summary
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Sesión completa</Text>
-      <Text style={styles.reward}>
-        +{phase.xpEarned} XP · 🔥 {phase.streakDays}{' '}
-        {phase.streakDays === 1 ? 'día' : 'días'}
-      </Text>
+      <Animated.View entering={FadeInDown.duration(350)} style={styles.animatedBlock}>
+        <Text style={styles.title}>Sesión completa</Text>
+        <Text style={styles.reward}>
+          +{shownXp} XP · 🔥 {phase.streakDays}{' '}
+          {phase.streakDays === 1 ? 'día' : 'días'}
+        </Text>
+      </Animated.View>
       <View style={styles.results}>
-        {results.map((r) => {
+        {results.map((r, idx) => {
           const evolved = levels[r.gameId] !== r.level;
           return (
-            <View key={r.gameId} style={styles.resultRow}>
+            <Animated.View
+              key={r.gameId}
+              entering={FadeInUp.delay(250 + idx * 150).duration(300)}
+              style={styles.resultRow}
+            >
               <Text style={styles.resultName}>{GAME_REGISTRY[r.gameId].name}</Text>
               <Text style={styles.resultLine}>
                 {r.score} pts · {r.accuracy}% precisión
@@ -235,21 +369,27 @@ export function TrainingSession({ onExit, onContinue }: Props) {
                   ? `Nivel ${r.level} → ${levels[r.gameId]}`
                   : `Nivel ${r.level} (se mantiene)`}
               </Text>
-            </View>
+            </Animated.View>
           );
         })}
       </View>
-      {onContinue && (
+      <Animated.View
+        entering={FadeIn.delay(700).duration(300)}
+        style={styles.animatedBlock}
+      >
+        <Text style={styles.levelHint}>
+          💡 Subís de nivel en un juego con 80% de precisión o más
+        </Text>
         <Pressable
-          onPress={onContinue}
+          onPress={startFresh}
           style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.buttonText}>SEGUIR JUGANDO</Text>
+          <Text style={styles.buttonText}>SEGUIR ENTRENANDO</Text>
         </Pressable>
-      )}
-      <Pressable onPress={onExit}>
-        <Text style={styles.exitLink}>VOLVER</Text>
-      </Pressable>
+        <Pressable onPress={onExit}>
+          <Text style={styles.exitLink}>VOLVER</Text>
+        </Pressable>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -268,6 +408,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  resumedNote: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  animatedBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.lg,
+  },
+  gameWrap: {
+    flex: 1,
+    alignSelf: 'stretch',
   },
   title: {
     color: colors.text,
@@ -316,6 +470,11 @@ const styles = StyleSheet.create({
   resultLevelUp: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  levelHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
   },
   button: {
     backgroundColor: colors.primary,

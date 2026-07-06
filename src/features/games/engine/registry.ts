@@ -33,63 +33,63 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
     name: 'Memoria visual',
     skill: 'memoria',
     instructions:
-      'Memorizá las celdas iluminadas y marcalas. En niveles altos se iluminan en secuencia: repetí el orden exacto.',
+      'Memorizá el patrón y marcalo. La consigna varía: a veces en orden exacto, a veces las celdas APAGADAS.',
     component: VisualMemoryGame,
   },
   reflexes: {
     name: 'Reflejos',
     skill: 'velocidad',
     instructions:
-      'Tocá la pantalla apenas se ponga verde. Si tocás antes de tiempo, perdés la ronda.',
+      'Tocá apenas aparezca el verde. La consigna varía: puede haber pantallas trampa o que haya que tocar el lado correcto.',
     component: ReflexesGame,
   },
   mental_math: {
     name: 'Cálculo mental',
     skill: 'calculo',
-    instructions: 'Resolvé cada operación eligiendo la respuesta correcta.',
+    instructions: 'Resolvé contra reloj. La consigna varía: elegir el resultado, decidir si una igualdad es verdadera, o el operador que falta.',
     component: MentalMathGame,
   },
   selective_attention: {
     name: 'Atención selectiva',
     skill: 'atencion',
     instructions:
-      'Tocá TODAS las figuras que cumplan la regla antes de que se acabe el tiempo. Los distractores penalizan, y en niveles altos la regla cambia a mitad de partida.',
+      'Tocá TODAS las figuras que pida la regla antes del tiempo. A veces la regla es al revés (todo MENOS...) y en niveles altos cambia a mitad de partida.',
     component: SelectiveAttentionGame,
   },
   number_memory: {
     name: 'Memoria numérica',
     skill: 'memoria',
-    instructions: 'Memorizá el número que aparece y escribilo de memoria con el teclado.',
+    instructions: 'Memorizá el número y escribilo. Atención a la consigna: a veces hay que escribirlo AL REVÉS.',
     component: NumberMemoryGame,
   },
   logic_series: {
     name: 'Series lógicas',
     skill: 'logica',
-    instructions: 'Descubrí el patrón de la serie y elegí el número que sigue.',
+    instructions: 'Descubrí el patrón: elegí el número que sigue, o encontrá cuál NO pertenece a la serie.',
     component: LogicSeriesGame,
   },
   visual_speed: {
     name: 'Velocidad visual',
     skill: 'visual',
-    instructions: 'Uno de los círculos tiene un color distinto. Encontralo y tocalo lo más rápido posible.',
+    instructions: 'Una figura es distinta a las demás: por color, tamaño o forma. Encontrala y tocala lo más rápido posible.',
     component: VisualSpeedGame,
   },
   spatial_rotation: {
     name: 'Rotación espacial',
     skill: 'visual',
-    instructions: 'Mirá la figura de arriba y elegí cuál de las opciones es la misma figura rotada (las espejadas no valen).',
+    instructions: 'Mirá la figura y elegí según la consigna: la misma figura ROTADA, o su versión ESPEJADA.',
     component: SpatialRotationGame,
   },
   stroop: {
     name: 'Stroop de colores',
     skill: 'atencion',
-    instructions: 'Tocá el color de la TINTA de la palabra, ignorando lo que la palabra dice. Contra reloj.',
+    instructions: 'Leé la consigna de arriba: a veces respondés por el color de la TINTA, a veces por lo que la palabra DICE.',
     component: StroopGame,
   },
   parity: {
     name: 'Par o impar',
     skill: 'velocidad',
-    instructions: 'Decidí si cada número es par o impar antes de que se acabe la barra de tiempo.',
+    instructions: 'Decisiones relámpago sobre cada número: par/impar, mayor/menor que 50, o múltiplo de 3, según la partida.',
     component: ParityGame,
   },
   n_back: {
@@ -101,13 +101,13 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
   target_sum: {
     name: 'Suma objetivo',
     skill: 'calculo',
-    instructions: 'Tocá los números que sumados dan exactamente el objetivo, antes de que se acabe el tiempo.',
+    instructions: 'Combiná números exactos contra reloj: sumá hasta el objetivo, o bajalo justo a cero, según la consigna.',
     component: TargetSumGame,
   },
   memory_pairs: {
     name: 'Memoria de parejas',
     skill: 'memoria',
-    instructions: 'Destapá las cartas de a dos y encontrá todas las parejas antes de que se acabe el tiempo.',
+    instructions: 'Encontrá todas las parejas antes del tiempo. A veces tenés un vistazo inicial del tablero... y mucho menos reloj.',
     component: MemoryPairsGame,
   },
   flash_count: {
@@ -119,13 +119,13 @@ export const GAME_REGISTRY: Record<GameId, GameDefinition> = {
   symmetry: {
     name: 'Simetría',
     skill: 'visual',
-    instructions: 'Decidí rápido si la figura es simétrica como un espejo. Las diferencias pueden ser de una sola celda.',
+    instructions: 'Decidí rápido si la figura es simétrica. El eje del espejo puede ser vertical u horizontal: miralo en la consigna.',
     component: SymmetryGame,
   },
   bigger_number: {
     name: 'El mayor engañoso',
     skill: 'logica',
-    instructions: 'Tocá el número mayor. Ojo: el tamaño en pantalla engaña — el número más chico puede verse enorme.',
+    instructions: 'Leé la consigna: a veces buscás el MAYOR, a veces el MENOR. Y el tamaño en pantalla siempre engaña.',
     component: BiggerNumberGame,
   },
 };

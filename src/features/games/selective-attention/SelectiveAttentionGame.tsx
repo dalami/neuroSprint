@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
@@ -40,8 +41,12 @@ interface Rule {
   color: StimColor;
 }
 
-function ruleText(r: Rule): string {
-  return `Tocá los ${SHAPE_LABEL[r.shape]} ${COLOR_LABEL[r.color]}`;
+type Polarity = 'normal' | 'negative';
+
+function ruleText(r: Rule, polarity: Polarity): string {
+  return polarity === 'negative'
+    ? `Tocá TODO MENOS los ${SHAPE_LABEL[r.shape]} ${COLOR_LABEL[r.color]}`
+    : `Tocá los ${SHAPE_LABEL[r.shape]} ${COLOR_LABEL[r.color]}`;
 }
 
 function randInt(min: number, max: number): number {
@@ -96,7 +101,12 @@ function distractorFor(rule: Rule): { shape: Shape; color: StimColor } {
 }
 
 /** Figuras en slots de una grilla 4×5 con jitter: nunca se superponen */
-function makeRoundFigures(rule: Rule, figureCount: number, targetCount: number): Figure[] {
+function makeRoundFigures(
+  rule: Rule,
+  figureCount: number,
+  targetsWanted: number,
+  polarity: Polarity
+): Figure[] {
   const slots = Array.from({ length: 20 }, (_, i) => i);
   for (let i = slots.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -107,8 +117,17 @@ function makeRoundFigures(rule: Rule, figureCount: number, targetCount: number):
     const slot = slots[i];
     const col = slot % 4;
     const row = Math.floor(slot / 4);
-    const isTarget = i < targetCount;
-    const kind = isTarget ? rule : distractorFor(rule);
+    let isTarget: boolean;
+    let kind: { shape: Shape; color: StimColor };
+    if (polarity === 'normal') {
+      isTarget = i < targetsWanted;
+      kind = isTarget ? rule : distractorFor(rule);
+    } else {
+      // negativa: los que COINCIDEN con la regla son los prohibidos
+      const forbiddenCount = figureCount - targetsWanted;
+      isTarget = i >= forbiddenCount;
+      kind = isTarget ? distractorFor(rule) : rule;
+    }
     return {
       id: i,
       shape: kind.shape,
@@ -129,19 +148,32 @@ type Phase =
 export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
   const { figures: figureCount, targets: targetCount, size, roundMs } = config(level);
 
-  // Reglas y figuras de las 5 rondas, pregeneradas
+  // Reglas, polaridad y figuras de las 5 rondas, pregeneradas
   const [setup] = useState(() => {
+    const polarity: Polarity =
+      level >= 15 && Math.random() < 0.4 ? 'negative' : 'normal';
+    const perRoundTargets =
+      polarity === 'normal'
+        ? targetCount
+        : figureCount - Math.max(2, Math.round(figureCount * 0.4));
     const rule1 = randomRule();
     const rule2 = level >= 40 ? randomRule(rule1) : null;
     const rounds = Array.from({ length: ROUNDS }, (_, r) => {
       const rule = rule2 && r >= RULE_CHANGE_ROUND ? rule2 : rule1;
-      return { rule, figures: makeRoundFigures(rule, figureCount, targetCount) };
+      return {
+        rule,
+        figures: makeRoundFigures(rule, figureCount, perRoundTargets, polarity),
+      };
     });
-    return { rule2, rounds };
+    return { rule2, rounds, polarity, perRoundTargets };
   });
 
+  // En la regla negativa hay más objetivos: más tiempo por ronda
+  const effRoundMs =
+    setup.polarity === 'negative' ? Math.round(roundMs * 1.5) : roundMs;
+
   const [phase, setPhase] = useState<Phase>({ kind: 'rule', round: 0 });
-  const [remainingMs, setRemainingMs] = useState(roundMs);
+  const [remainingMs, setRemainingMs] = useState(effRoundMs);
   const [tapped, setTapped] = useState<Set<number>>(new Set());      // objetivos acertados
   const [wrongTapped, setWrongTapped] = useState<Set<number>>(new Set()); // distractores tocados
 
@@ -160,7 +192,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
     if (roundEndedRef.current) return;
     roundEndedRef.current = true;
     if (intervalRef.current) clearInterval(intervalRef.current);
-    targetsTotalRef.current += targetCount;
+    targetsTotalRef.current += setup.perRoundTargets;
     setPhase({ kind: 'roundEnd', round, completed });
   };
 
@@ -182,12 +214,12 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
         setWrongTapped(new Set());
         roundEndedRef.current = false;
         roundStartRef.current = Date.now();
-        setRemainingMs(roundMs);
+        setRemainingMs(effRoundMs);
         setPhase({ kind: 'play', round: phase.round });
       }, RULE_MS);
     } else if (phase.kind === 'play') {
       intervalRef.current = setInterval(() => {
-        const left = roundMs - (Date.now() - roundStartRef.current);
+        const left = effRoundMs - (Date.now() - roundStartRef.current);
         if (left <= 0) {
           endRound(phase.round, false);
         } else {
@@ -206,7 +238,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
           setWrongTapped(new Set());
           roundEndedRef.current = false;
           roundStartRef.current = Date.now();
-          setRemainingMs(roundMs);
+          setRemainingMs(effRoundMs);
           setPhase({ kind: 'play', round: next });
         }
       }, ROUND_END_MS);
@@ -218,7 +250,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
         : 0;
       const rts = hitTimesRef.current;
       const speedBonus = rts.reduce(
-        (acc, t) => acc + Math.max(0, Math.round((roundMs - t) / 100)),
+        (acc, t) => acc + Math.max(0, Math.round((effRoundMs - t) / 100)),
         0
       );
       onFinish({
@@ -250,7 +282,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
       setTapped(next);
       hitsRef.current += 1;
       hitTimesRef.current.push(Date.now() - roundStartRef.current);
-      if (next.size === targetCount) endRound(phase.round, true);
+      if (next.size === setup.perRoundTargets) endRound(phase.round, true);
     } else {
       if (wrongTapped.has(f.id)) return;
       const next = new Set(wrongTapped);
@@ -265,7 +297,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
     return (
       <View style={styles.container}>
         {phase.round > 0 && <Text style={styles.ruleChange}>¡CAMBIO DE REGLA!</Text>}
-        <Text style={styles.ruleBig}>{ruleText(rule)}</Text>
+        <Text style={styles.ruleBig}>{ruleText(rule, setup.polarity)}</Text>
       </View>
     );
   }
@@ -285,7 +317,7 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
         Ronda {phase.round + 1} de {ROUNDS} · nivel {level}
       </Text>
       <View style={styles.headerRow}>
-        <Text style={styles.rule}>{ruleText(rule)}</Text>
+        <Text style={styles.rule}>{ruleText(rule, setup.polarity)}</Text>
         <Text style={[styles.timer, remainingMs <= 1500 && styles.timerUrgent]}>
           {isEnd
             ? phase.completed
@@ -300,25 +332,33 @@ export function SelectiveAttentionGame({ gameId, level, onFinish }: GameProps) {
           const missed = isEnd && f.isTarget; // al terminar, se marcan las que faltaron
           const wrong = wrongTapped.has(f.id);
           return (
-            <Pressable
-              key={f.id}
-              onPress={() => handleFigure(f)}
+            <Animated.View
+              key={`r${phase.round}-f${f.id}`}
+              entering={ZoomIn.delay(f.id * 30).duration(200)}
+              exiting={ZoomOut.duration(150)}
               style={{
                 position: 'absolute',
                 top: `${f.topPct}%`,
                 left: `${f.leftPct}%`,
                 width: size,
                 height: size,
-                backgroundColor: COLOR_HEX[f.color],
-                borderRadius: f.shape === 'circle' ? size / 2 : Math.round(size / 8),
-                borderWidth: wrong || missed ? 3 : 0,
-                borderColor: wrong ? '#FFFFFF' : colors.danger,
-                opacity: wrong ? 0.45 : 1,
-                ...(f.shape === 'diamond'
-                  ? { transform: [{ rotate: '45deg' }] }
-                  : {}),
               }}
-            />
+            >
+              <Pressable
+                onPress={() => handleFigure(f)}
+                style={{
+                  flex: 1,
+                  backgroundColor: COLOR_HEX[f.color],
+                  borderRadius: f.shape === 'circle' ? size / 2 : Math.round(size / 8),
+                  borderWidth: wrong || missed ? 3 : 0,
+                  borderColor: wrong ? '#FFFFFF' : colors.danger,
+                  opacity: wrong ? 0.45 : 1,
+                  ...(f.shape === 'diamond'
+                    ? { transform: [{ rotate: '45deg' }] }
+                    : {}),
+                }}
+              />
+            </Animated.View>
           );
         })}
       </View>

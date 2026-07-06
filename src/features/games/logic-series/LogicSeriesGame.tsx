@@ -6,11 +6,9 @@ import type { GameProps } from '../engine/types';
 const QUESTIONS = 6;
 const FEEDBACK_MS = 600;
 
-interface Series {
-  terms: number[];
-  answer: number;
-  options: number[];
-}
+type Series =
+  | { kind: 'next'; terms: number[]; answer: number; options: number[] }
+  | { kind: 'intruder'; terms: number[]; wrongIdx: number };
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -65,8 +63,33 @@ function interleaved(level: number): { terms: number[]; answer: number } {
   return { terms: [a[0], b[0], a[1], b[1], a[2]], answer: b[2] };
 }
 
-/** El pool de generadores crece con el nivel */
+/** Serie completa de 5 términos (para la variante del intruso) */
+function fullSeries(level: number): number[] {
+  if (Math.random() < 0.6) {
+    const start = randInt(1, 10 + level);
+    const step = randInt(2, 4 + Math.floor(level / 5));
+    return [0, 1, 2, 3, 4].map((i) => start + i * step);
+  }
+  const start = randInt(1, 5);
+  const ratio = randInt(2, 3);
+  return [0, 1, 2, 3, 4].map((i) => start * ratio ** i);
+}
+
+/** El pool de generadores crece con el nivel; el intruso se sortea desde 12 */
 function makeSeries(level: number): Series {
+  if (level >= 12 && Math.random() < 0.4) {
+    const terms = fullSeries(level);
+    const wrongIdx = randInt(1, 3);
+    let delta = 0;
+    while (delta === 0) {
+      delta =
+        (Math.random() < 0.5 ? -1 : 1) *
+        randInt(1, Math.max(2, Math.round(Math.abs(terms[wrongIdx]) * 0.15)));
+    }
+    terms[wrongIdx] = Math.max(0, terms[wrongIdx] + delta);
+    return { kind: 'intruder', terms, wrongIdx };
+  }
+
   const pool: Array<(l: number) => { terms: number[]; answer: number }> = [arithmetic];
   if (level >= 16) pool.push(geometric);
   if (level >= 31) pool.push(growingStep);
@@ -82,6 +105,7 @@ function makeSeries(level: number): Series {
   }
 
   return {
+    kind: 'next',
     terms,
     answer,
     options: [...opts].sort(() => Math.random() - 0.5),
@@ -106,10 +130,10 @@ export function LogicSeriesGame({ gameId, level, onFinish }: GameProps) {
     };
   }, []);
 
-  const handleOption = (value: number) => {
+  const handleAnswer = (value: number, good: boolean) => {
     if (chosen !== null) return;
     setChosen(value);
-    if (value === questions[index].answer) correctRef.current += 1;
+    if (good) correctRef.current += 1;
 
     timerRef.current = setTimeout(() => {
       setChosen(null);
@@ -136,28 +160,58 @@ export function LogicSeriesGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         {index + 1} de {QUESTIONS} · nivel {level}
       </Text>
-      <Text style={styles.hint}>¿Qué número sigue?</Text>
-      <Text style={styles.series}>{q.terms.join(' · ')} · ?</Text>
-      <View style={styles.optionsGrid}>
-        {q.options.map((opt) => {
-          const isChosen = chosen === opt;
-          const showResult = chosen !== null && (isChosen || opt === q.answer);
-          const good = opt === q.answer;
-          return (
-            <Pressable
-              key={opt}
-              onPress={() => handleOption(opt)}
-              style={({ pressed }) => [
-                styles.option,
-                pressed && chosen === null && styles.optionPressed,
-                showResult && { backgroundColor: good ? colors.success : colors.danger },
-              ]}
-            >
-              <Text style={styles.optionText}>{opt}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={styles.hint}>
+        {q.kind === 'next' ? '¿Qué número sigue?' : '¿Cuál NO pertenece a la serie?'}
+      </Text>
+      {q.kind === 'next' ? (
+        <>
+          <Text style={styles.series}>{q.terms.join(' · ')} · ?</Text>
+          <View style={styles.optionsGrid}>
+            {q.options.map((opt) => {
+              const good = opt === q.answer;
+              const showResult = chosen !== null && (chosen === opt || good);
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => handleAnswer(opt, good)}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && chosen === null && styles.optionPressed,
+                    showResult && {
+                      backgroundColor: good ? colors.success : colors.danger,
+                    },
+                  ]}
+                >
+                  <Text style={styles.optionText}>{opt}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : (
+        <View style={styles.optionsGrid}>
+          {q.terms.map((term, i) => {
+            const good = i === q.wrongIdx;
+            const showResult = chosen !== null && (chosen === i || good);
+            return (
+              <Pressable
+                key={i}
+                onPress={() => handleAnswer(i, good)}
+                style={({ pressed }) => [
+                  styles.option,
+                  styles.optionChip,
+                  pressed && chosen === null && styles.optionPressed,
+                  showResult && {
+                    backgroundColor: good ? colors.success : colors.danger,
+                  },
+                ]}
+              >
+                <Text style={styles.optionText}>{term}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -203,6 +257,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     width: '42%',
     alignItems: 'center',
+  },
+  optionChip: {
+    width: '28%',
+    paddingVertical: spacing.md,
   },
   optionPressed: {
     opacity: 0.7,

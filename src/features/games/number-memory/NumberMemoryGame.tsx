@@ -39,6 +39,9 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
   const [phase, setPhase] = useState<Phase>('show');
   const [target, setTarget] = useState<string>(() => makeNumber(digits));
   const [entry, setEntry] = useState('');
+  // Variante: escribir el número AL REVÉS (span inverso, más difícil)
+  const [reverse] = useState(() => level >= 10 && Math.random() < 0.5);
+  const expected = reverse ? [...target].reverse().join('') : target;
 
   const hitsRef = useRef(0);       // dígitos correctos en la posición correcta
   const totalRef = useRef(0);      // dígitos totales evaluados
@@ -101,7 +104,7 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
     if (nextEntry.length === target.length) {
       let hits = 0;
       for (let i = 0; i < target.length; i++) {
-        if (nextEntry[i] === target[i]) hits += 1;
+        if (nextEntry[i] === expected[i]) hits += 1;
       }
       hitsRef.current += hits;
       totalRef.current += target.length;
@@ -113,6 +116,7 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
     <View style={styles.container}>
       <Text style={styles.progress}>
         Ronda {round + 1} de {ROUNDS} · nivel {level} · {digits} dígitos
+        {reverse ? ' · AL REVÉS' : ''}
       </Text>
 
       {phase === 'show' && (
@@ -124,7 +128,9 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
 
       {phase === 'input' && (
         <>
-          <Text style={styles.hint}>Escribilo de memoria</Text>
+          <Text style={styles.hint}>
+            {reverse ? '¡Escribilo AL REVÉS!' : 'Escribilo de memoria'}
+          </Text>
           <Text style={styles.number}>
             {entry.padEnd(target.length, '·')}
           </Text>
@@ -148,14 +154,16 @@ export function NumberMemoryGame({ gameId, level, onFinish }: GameProps) {
 
       {phase === 'feedback' && (
         <>
-          <Text style={styles.hint}>Era</Text>
-          <Text style={styles.number}>{target}</Text>
+          <Text style={styles.hint}>
+            {reverse ? 'Había que escribir' : 'Era'}
+          </Text>
+          <Text style={styles.number}>{expected}</Text>
           <Text style={styles.hint}>Escribiste</Text>
           <Text style={styles.entryFeedback}>
             {entry.split('').map((ch, i) => (
               <Text
                 key={i}
-                style={{ color: ch === target[i] ? colors.success : colors.danger }}
+                style={{ color: ch === expected[i] ? colors.success : colors.danger }}
               >
                 {ch}
               </Text>

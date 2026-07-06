@@ -15,19 +15,36 @@ function config(level: number) {
   return { gridSize, cells: gridSize * gridSize, lightnessDelta };
 }
 
+type OddKind = 'color' | 'size' | 'shape';
+
 interface Round {
   oddIndex: number;
+  oddKind: OddKind;
   baseColor: string;
   oddColor: string;
 }
 
-function makeRound(cells: number, lightnessDelta: number): Round {
+function pickOddKind(level: number): OddKind {
+  const pool: OddKind[] = ['color'];
+  if (level >= 10) pool.push('size');
+  if (level >= 18) pool.push('shape');
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function makeRound(cells: number, lightnessDelta: number, level: number): Round {
   const hue = Math.floor(Math.random() * 360);
   const baseL = 40 + Math.floor(Math.random() * 15); // 40-54%
+  const oddKind = pickOddKind(level);
+  const baseColor = `hsl(${hue}, 70%, ${baseL}%)`;
   return {
     oddIndex: Math.floor(Math.random() * cells),
-    baseColor: `hsl(${hue}, 70%, ${baseL}%)`,
-    oddColor: `hsl(${hue}, 70%, ${baseL + lightnessDelta}%)`,
+    oddKind,
+    baseColor,
+    // solo difiere el color en la variante 'color'
+    oddColor:
+      oddKind === 'color'
+        ? `hsl(${hue}, 70%, ${baseL + lightnessDelta}%)`
+        : baseColor,
   };
 }
 
@@ -35,7 +52,9 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
   const { gridSize, cells, lightnessDelta } = config(level);
 
   const [round, setRound] = useState(0);
-  const [current, setCurrent] = useState<Round>(() => makeRound(cells, lightnessDelta));
+  const [current, setCurrent] = useState<Round>(() =>
+    makeRound(cells, lightnessDelta, level)
+  );
 
   const hitsRef = useRef(0);
   const reactionsRef = useRef<number[]>([]);
@@ -56,7 +75,7 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
     const next = round + 1;
     if (next < ROUNDS) {
       setRound(next);
-      setCurrent(makeRound(cells, lightnessDelta));
+      setCurrent(makeRound(cells, lightnessDelta, level));
       roundStartedRef.current = Date.now();
     } else {
       finishedRef.current = true;
@@ -86,7 +105,7 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
       <Text style={styles.progress}>
         Ronda {round + 1} de {ROUNDS} · nivel {level}
       </Text>
-      <Text style={styles.hint}>Tocá el círculo distinto</Text>
+      <Text style={styles.hint}>Tocá la figura DISTINTA (color, tamaño o forma)</Text>
       <View style={styles.grid}>
         {Array.from({ length: cells }, (_, cell) => (
           <View
@@ -101,6 +120,10 @@ export function VisualSpeedGame({ gameId, level, onFinish }: GameProps) {
                   backgroundColor:
                     cell === current.oddIndex ? current.oddColor : current.baseColor,
                 },
+                cell === current.oddIndex &&
+                  current.oddKind === 'size' && { margin: '14%' },
+                cell === current.oddIndex &&
+                  current.oddKind === 'shape' && { borderRadius: 8 },
               ]}
             />
           </View>

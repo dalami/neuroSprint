@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../../theme';
 import type { GameProps } from '../engine/types';
@@ -10,25 +11,76 @@ function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/** Tiempo por número: MUY corto y baja con el nivel */
 function timeLimitMs(level: number): number {
   return Math.max(700, 2000 - level * 13);
 }
 
-/** Números más grandes a mayor nivel */
-function makeNumber(level: number): number {
-  if (level <= 20) return randInt(1, 99);
-  if (level <= 50) return randInt(10, 499);
-  return randInt(100, 999);
+/**
+ * Variantes (se sortea una por partida):
+ * - parity: ¿par o impar?
+ * - gt50:   ¿mayor o menor que 50?
+ * - mult3:  ¿múltiplo de 3?
+ */
+type Variant = 'parity' | 'gt50' | 'mult3';
+
+interface VariantDef {
+  hint: string;
+  labels: [string, string]; // [botón A, botón B]
+  makeNumber: (level: number) => number;
+  isA: (n: number) => boolean; // true si la respuesta correcta es el botón A
+}
+
+const VARIANTS: Record<Variant, VariantDef> = {
+  parity: {
+    hint: '¿PAR o IMPAR?',
+    labels: ['PAR', 'IMPAR'],
+    makeNumber: (level) => {
+      if (level <= 20) return randInt(1, 99);
+      if (level <= 50) return randInt(10, 499);
+      return randInt(100, 999);
+    },
+    isA: (n) => n % 2 === 0,
+  },
+  gt50: {
+    hint: '¿MAYOR o MENOR que 50?',
+    labels: ['MAYOR', 'MENOR'],
+    makeNumber: () => {
+      let n = randInt(10, 99);
+      while (n === 50) n = randInt(10, 99);
+      return n;
+    },
+    isA: (n) => n > 50,
+  },
+  mult3: {
+    hint: '¿Es MÚLTIPLO de 3?',
+    labels: ['SÍ', 'NO'],
+    makeNumber: (level) => {
+      // ~50% múltiplos para que no se responda por estadística
+      if (Math.random() < 0.5) return 3 * randInt(2, 33 + Math.floor(level / 3));
+      let n = randInt(4, 99 + level);
+      while (n % 3 === 0) n = randInt(4, 99 + level);
+      return n;
+    },
+    isA: (n) => n % 3 === 0,
+  },
+};
+
+function pickVariant(level: number): Variant {
+  const pool: Variant[] = ['parity'];
+  if (level >= 8) pool.push('gt50');
+  if (level >= 20) pool.push('mult3');
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 export function ParityGame({ gameId, level, onFinish }: GameProps) {
+  const [variant] = useState<Variant>(() => pickVariant(level));
+  const def = VARIANTS[variant];
+
   const [numbers] = useState<number[]>(() =>
-    Array.from({ length: COUNT }, () => makeNumber(level))
+    Array.from({ length: COUNT }, () => def.makeNumber(level))
   );
   const [index, setIndex] = useState(0);
-  // null = esperando; 'timeout'; 'par' | 'impar' = lo que tocó
-  const [chosen, setChosen] = useState<'par' | 'impar' | 'timeout' | null>(null);
+  const [chosen, setChosen] = useState<'A' | 'B' | 'timeout' | null>(null);
   const limit = timeLimitMs(level);
   const [remainingMs, setRemainingMs] = useState(limit);
 
@@ -96,12 +148,12 @@ export function ParityGame({ gameId, level, onFinish }: GameProps) {
     };
   }, []);
 
-  const handle = (answer: 'par' | 'impar') => {
+  const handle = (button: 'A' | 'B') => {
     if (chosen !== null || answeredRef.current) return;
     answeredRef.current = true;
-    setChosen(answer);
-    const isEven = numbers[index] % 2 === 0;
-    if ((answer === 'par') === isEven) {
+    setChosen(button);
+    const correctIsA = def.isA(numbers[index]);
+    if ((button === 'A') === correctIsA) {
       correctRef.current += 1;
       reactionsRef.current.push(Date.now() - qStartRef.current);
     }
@@ -109,16 +161,16 @@ export function ParityGame({ gameId, level, onFinish }: GameProps) {
   };
 
   const n = numbers[index];
-  const isEven = n % 2 === 0;
   const answered = chosen !== null;
   const wasCorrect =
-    chosen === 'timeout' ? false : (chosen === 'par') === isEven;
+    chosen === 'timeout' ? false : (chosen === 'A') === def.isA(n);
 
   return (
     <View style={styles.container}>
       <Text style={styles.progress}>
         {index + 1} de {COUNT} · nivel {level}
       </Text>
+      <Text style={styles.hint}>{def.hint}</Text>
       <View style={styles.timerBarBg}>
         <View
           style={[
@@ -128,26 +180,28 @@ export function ParityGame({ gameId, level, onFinish }: GameProps) {
           ]}
         />
       </View>
-      <Text
-        style={[
-          styles.number,
-          answered && { color: wasCorrect ? colors.success : colors.danger },
-        ]}
-      >
-        {n}
-      </Text>
+      <Animated.View key={`n-${index}`} entering={ZoomIn.duration(150)}>
+        <Text
+          style={[
+            styles.number,
+            answered && { color: wasCorrect ? colors.success : colors.danger },
+          ]}
+        >
+          {n}
+        </Text>
+      </Animated.View>
       <View style={styles.buttonsRow}>
         <Pressable
-          onPress={() => handle('par')}
+          onPress={() => handle('A')}
           style={({ pressed }) => [styles.answerButton, pressed && styles.pressed]}
         >
-          <Text style={styles.answerText}>PAR</Text>
+          <Text style={styles.answerText}>{def.labels[0]}</Text>
         </Pressable>
         <Pressable
-          onPress={() => handle('impar')}
+          onPress={() => handle('B')}
           style={({ pressed }) => [styles.answerButton, pressed && styles.pressed]}
         >
-          <Text style={styles.answerText}>IMPAR</Text>
+          <Text style={styles.answerText}>{def.labels[1]}</Text>
         </Pressable>
       </View>
     </View>
@@ -161,7 +215,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   progress: {
     position: 'absolute',
@@ -169,6 +223,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
     letterSpacing: 1,
+  },
+  hint: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
   timerBarBg: {
     alignSelf: 'stretch',

@@ -23,9 +23,11 @@ const ITEMS: Item[] = [
   { shape: 'diamond', hex: '#388BFD' },
 ];
 
-/** n crece con el nivel: comparar contra 1, 2 o 3 posiciones atrás */
+/** n se SORTEA entre los desbloqueados por nivel: 1, 2 o 3 atrás */
 function nFor(level: number): number {
-  return level <= 34 ? 1 : level <= 70 ? 2 : 3;
+  if (level <= 34) return 1;
+  if (level <= 70) return 1 + Math.floor(Math.random() * 2);
+  return 1 + Math.floor(Math.random() * 3);
 }
 
 function timeLimitMs(level: number): number {
