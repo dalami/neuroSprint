@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
+import { showInterstitial } from '../../lib/ads';
 import { getSessionSequence } from '../games/engine/sessionSequence';
 import { GAME_REGISTRY } from '../games/engine/registry';
 import type { GameId, GameResult } from '../games/engine/types';
@@ -27,6 +28,9 @@ type Phase =
 interface Props {
   onExit: () => void;
 }
+
+/** Tiempo para leer las estadísticas antes del intersticial automático */
+const AD_AFTER_SUMMARY_MS = 2800;
 
 /** Cuenta de 0 al objetivo en durationMs (para el XP del resumen) */
 function useCountUp(target: number, durationMs = 800): number {
@@ -66,6 +70,19 @@ export function TrainingSession({ onExit }: Props) {
   const shownXp = useCountUp(phase.kind === 'summary' ? phase.xpEarned : 0);
   const sessionIdRef = useRef<string | null>(null);
   const startedRef = useRef(false);
+  const [adDone, setAdDone] = useState(false);
+
+  // Al entrar al resumen: pausa para leer las estadísticas, intersticial
+  // automático, y recién al cerrarlo aparecen los botones. Si no hay
+  // anuncio (suscriptor, o aún no cargó), los botones aparecen igual.
+  useEffect(() => {
+    if (phase.kind !== 'summary') return;
+    const timer = setTimeout(() => {
+      const shown = showInterstitial(() => setAdDone(true));
+      if (!shown) setAdDone(true);
+    }, AD_AFTER_SUMMARY_MS);
+    return () => clearTimeout(timer);
+  }, [phase.kind]);
 
   // Punto de partida: niveles del servidor
   useEffect(() => {
@@ -81,6 +98,7 @@ export function TrainingSession({ onExit }: Props) {
    */
   const startFresh = async () => {
     setPhase({ kind: 'starting' });
+    setAdDone(false);
     setResults([]);
     setResumedAt(null);
     setSequence(null);
@@ -373,23 +391,25 @@ export function TrainingSession({ onExit }: Props) {
           );
         })}
       </View>
-      <Animated.View
-        entering={FadeIn.delay(700).duration(300)}
-        style={styles.animatedBlock}
-      >
-        <Text style={styles.levelHint}>
-          💡 Subís de nivel en un juego con 80% de precisión o más
-        </Text>
-        <Pressable
-          onPress={startFresh}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+      {adDone && (
+        <Animated.View
+          entering={FadeIn.duration(300)}
+          style={styles.animatedBlock}
         >
-          <Text style={styles.buttonText}>SEGUIR ENTRENANDO</Text>
-        </Pressable>
-        <Pressable onPress={onExit}>
-          <Text style={styles.exitLink}>VOLVER</Text>
-        </Pressable>
-      </Animated.View>
+          <Text style={styles.levelHint}>
+            💡 Subís de nivel en un juego con 80% de precisión o más
+          </Text>
+          <Pressable
+            onPress={startFresh}
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+          >
+            <Text style={styles.buttonText}>SEGUIR ENTRENANDO</Text>
+          </Pressable>
+          <Pressable onPress={onExit}>
+            <Text style={styles.exitLink}>VOLVER</Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }

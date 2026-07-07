@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AuthProvider } from '../features/auth/AuthContext';
+import { initAds } from '../lib/ads';
 import { initSounds } from '../lib/sounds';
 import { colors } from '../theme';
 
@@ -11,6 +12,7 @@ const queryClient = new QueryClient();
 export default function RootLayout() {
   useEffect(() => {
     initSounds();
+    initAds();
   }, []);
 
   return (

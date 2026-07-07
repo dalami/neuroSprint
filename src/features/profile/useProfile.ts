@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { setAdsDisabled } from '../../lib/ads';
 import { useAuth } from '../auth/AuthContext';
 import { ALL_GAME_IDS, type GameId } from '../games/engine/types';
 
@@ -10,6 +11,8 @@ export interface Profile {
   level: number;
   streak_days: number;
   test_completed: boolean;
+  /** Suscripción "sin anuncios": fecha de expiración o null */
+  ads_free_expires_at: string | null;
 }
 
 /** Fila de profiles del usuario logueado */
@@ -23,11 +26,22 @@ export function useProfile() {
     queryFn: async (): Promise<Profile> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, xp, level, streak_days, test_completed')
+        .select(
+          'id, display_name, xp, level, streak_days, test_completed, ads_free_expires_at'
+        )
         .eq('id', uid!)
         .single();
       if (error) throw error;
-      return data as Profile;
+      const profile = data as Profile;
+
+      // Sincroniza el filtro de anuncios en cada lectura del perfil:
+      // suscripto y vigente => sin intersticiales.
+      setAdsDisabled(
+        profile.ads_free_expires_at !== null &&
+          new Date(profile.ads_free_expires_at).getTime() > Date.now()
+      );
+
+      return profile;
     },
   });
 }

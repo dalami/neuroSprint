@@ -14,11 +14,12 @@ import { colors, radius, spacing } from '../theme';
 
 export default function LoginScreen() {
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageKind, setMessageKind] = useState<'error' | 'ok'>('error');
 
   if (loading) {
     return (
@@ -33,7 +34,26 @@ export default function LoginScreen() {
   }
 
   const submit = async () => {
+    if (mode === 'forgot') {
+      if (!email.trim()) {
+        setMessageKind('error');
+        setMessage('Ingresá tu email');
+        return;
+      }
+      setBusy(true);
+      setMessage(null);
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      setMessageKind(error ? 'error' : 'ok');
+      setMessage(
+        error
+          ? error.message
+          : 'Te enviamos un email con el enlace para crear una contraseña nueva. Revisá tu correo (y el spam).'
+      );
+      setBusy(false);
+      return;
+    }
     if (!email.trim() || !password) {
+      setMessageKind('error');
       setMessage('Completá email y contraseña');
       return;
     }
@@ -45,16 +65,22 @@ export default function LoginScreen() {
         email: email.trim(),
         password,
       });
-      if (error) setMessage(error.message);
+      if (error) {
+        setMessageKind('error');
+        setMessage(error.message);
+      }
       // si no hay error, la sesión llega por onAuthStateChange y el Redirect actúa
     } else {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       });
-      if (error) setMessage(error.message);
-      else if (!data.session) {
+      if (error) {
+        setMessageKind('error');
+        setMessage(error.message);
+      } else if (!data.session) {
         // pasa solo si la confirmación de email está activada en Supabase
+        setMessageKind('ok');
         setMessage('Revisá tu correo para confirmar la cuenta');
       }
     }
@@ -65,7 +91,11 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>NeuroSprint</Text>
       <Text style={styles.subtitle}>
-        {mode === 'login' ? 'Iniciá sesión' : 'Creá tu cuenta'}
+        {mode === 'login'
+          ? 'Iniciá sesión'
+          : mode === 'register'
+            ? 'Creá tu cuenta'
+            : 'Recuperá tu contraseña'}
       </Text>
 
       <TextInput
@@ -77,16 +107,22 @@ export default function LoginScreen() {
         value={email}
         onChangeText={setEmail}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        placeholderTextColor={colors.textMuted}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      {mode !== 'forgot' && (
+        <TextInput
+          style={styles.input}
+          placeholder="Contraseña"
+          placeholderTextColor={colors.textMuted}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+      )}
 
-      {message && <Text style={styles.message}>{message}</Text>}
+      {message && (
+        <Text style={messageKind === 'ok' ? styles.messageOk : styles.message}>
+          {message}
+        </Text>
+      )}
 
       <Pressable
         onPress={submit}
@@ -97,9 +133,26 @@ export default function LoginScreen() {
         ]}
       >
         <Text style={styles.buttonText}>
-          {busy ? '...' : mode === 'login' ? 'ENTRAR' : 'REGISTRARME'}
+          {busy
+            ? '...'
+            : mode === 'login'
+              ? 'ENTRAR'
+              : mode === 'register'
+                ? 'REGISTRARME'
+                : 'ENVIAR ENLACE'}
         </Text>
       </Pressable>
+
+      {mode === 'login' && (
+        <Pressable
+          onPress={() => {
+            setMode('forgot');
+            setMessage(null);
+          }}
+        >
+          <Text style={styles.switchLink}>¿Olvidaste tu contraseña?</Text>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={() => {
@@ -110,7 +163,9 @@ export default function LoginScreen() {
         <Text style={styles.switchLink}>
           {mode === 'login'
             ? '¿No tenés cuenta? Registrate'
-            : '¿Ya tenés cuenta? Iniciá sesión'}
+            : mode === 'register'
+              ? '¿Ya tenés cuenta? Iniciá sesión'
+              : 'Volver a iniciar sesión'}
         </Text>
       </Pressable>
     </SafeAreaView>
@@ -150,6 +205,11 @@ const styles = StyleSheet.create({
   },
   message: {
     color: colors.danger,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  messageOk: {
+    color: colors.success,
     fontSize: 14,
     textAlign: 'center',
   },
