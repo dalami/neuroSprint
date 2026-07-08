@@ -49,6 +49,10 @@ export default function HomeScreen() {
         <Text style={styles.statsLink}>Ver mis estadísticas →</Text>
       </Pressable>
 
+      <Pressable onPress={() => router.push('/suscripcion')}>
+        <Text style={styles.statsLink}>Sacá los anuncios ✨</Text>
+      </Pressable>
+
       <Pressable onPress={() => supabase.auth.signOut()}>
         <Text style={styles.linkSmall}>Cerrar sesión</Text>
       </Pressable>

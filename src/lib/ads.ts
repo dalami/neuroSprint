@@ -21,6 +21,14 @@ const INTERSTITIAL_UNIT_ID = __DEV__
   ? TestIds.INTERSTITIAL
   : 'ca-app-pub-1559221336009591/5722764809';
 
+/**
+ * IDs de dispositivos de PRUEBA: estos equipos ven siempre anuncios de test,
+ * incluso en producción. Imprescindible para no generar tráfico inválido
+ * con el teléfono propio (AdMob suspende cuentas por eso).
+ * El ID sale del logcat: buscar "setTestDeviceIds" tras pedir un anuncio.
+ */
+const TEST_DEVICE_IDS: string[] = [];
+
 let interstitial: InterstitialAd | null = null;
 let loaded = false;
 let ready = false;
@@ -31,6 +39,11 @@ let onClosedCallback: (() => void) | null = null;
 export async function initAds(): Promise<void> {
   if (ready) return;
   try {
+    if (TEST_DEVICE_IDS.length > 0) {
+      await mobileAds().setRequestConfiguration({
+        testDeviceIdentifiers: TEST_DEVICE_IDS,
+      });
+    }
     await mobileAds().initialize();
     interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_UNIT_ID);
     interstitial.addAdEventListener(AdEventType.LOADED, () => {

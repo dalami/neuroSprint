@@ -2,7 +2,7 @@
   "expo": {
     "name": "neurosprint",
     "slug": "neurosprint",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "neurosprint",
@@ -12,7 +12,6 @@
     },
     "android": {
       "package": "ar.com.neurosprint",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -42,7 +41,13 @@
           "androidAppId": "ca-app-pub-1559221336009591~7648266166"
         }
       ],
-      "expo-iap"
+      "expo-iap",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.1068575081784-7tp2pbu805mno37vt2aop8g2s3lpaj2c"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

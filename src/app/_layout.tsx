@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AuthProvider } from '../features/auth/AuthContext';
 import { initAds } from '../lib/ads';
+import { configureGoogleSignIn } from '../lib/googleAuth';
 import { initSounds } from '../lib/sounds';
 import { colors } from '../theme';
 
@@ -13,6 +14,7 @@ export default function RootLayout() {
   useEffect(() => {
     initSounds();
     initAds();
+    configureGoogleSignIn();
   }, []);
 
   return (

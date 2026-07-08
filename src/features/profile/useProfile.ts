@@ -13,6 +13,8 @@ export interface Profile {
   test_completed: boolean;
   /** Suscripción "sin anuncios": fecha de expiración o null */
   ads_free_expires_at: string | null;
+  /** Token de la última compra validada (para restaurar/revalidar) */
+  google_purchase_token: string | null;
 }
 
 /** Fila de profiles del usuario logueado */
@@ -27,7 +29,7 @@ export function useProfile() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, display_name, xp, level, streak_days, test_completed, ads_free_expires_at'
+          'id, display_name, xp, level, streak_days, test_completed, ads_free_expires_at, google_purchase_token'
         )
         .eq('id', uid!)
         .single();

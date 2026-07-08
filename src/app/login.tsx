@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../features/auth/AuthContext';
 import { supabase } from '../lib/supabase';
+import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { signInWithGoogle } from '../lib/googleAuth';
 import { colors, radius, spacing } from '../theme';
 
 export default function LoginScreen() {
@@ -18,8 +20,22 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<'error' | 'ok'>('error');
+
+  const handleGoogle = async () => {
+    setGoogleBusy(true);
+    setMessage(null);
+    const result = await signInWithGoogle();
+    setGoogleBusy(false);
+    if (result.kind === 'error') {
+      setMessageKind('error');
+      setMessage(result.message);
+    }
+    // 'ok': la sesión ya quedó creada; el AuthContext la toma sola.
+    // 'cancelled': el usuario cerró el picker de cuentas, no hay nada que mostrar.
+  };
 
   if (loading) {
     return (
@@ -143,6 +159,16 @@ export default function LoginScreen() {
         </Text>
       </Pressable>
 
+      {mode !== 'forgot' && (
+        <GoogleSigninButton
+          size={GoogleSigninButton.Size.Wide}
+          color={GoogleSigninButton.Color.Dark}
+          onPress={handleGoogle}
+          disabled={googleBusy}
+          style={styles.googleButton}
+        />
+      )}
+
       {mode === 'login' && (
         <Pressable
           onPress={() => {
@@ -212,6 +238,10 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 14,
     textAlign: 'center',
+  },
+  googleButton: {
+    alignSelf: 'stretch',
+    marginTop: spacing.md,
   },
   button: {
     backgroundColor: colors.primary,
